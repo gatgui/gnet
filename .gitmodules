@@ -1,0 +1,6 @@
+[submodule "excons"]
+	path = excons
+	url = git://github.com/gatgui/excons
+[submodule "gcore"]
+	path = gcore
+	url = git://github.com/gatgui/gcore
