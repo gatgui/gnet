@@ -22,12 +22,12 @@ USA.
 */
 
 #include <gnet/host.h>
-#include <gcore/rexp.h>
+#include <gcore/rex.h>
 #include <sstream>
 
 namespace gnet {
 
-static gcore::Regexp IPAddressRE(IEC("\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"));
+static gcore::Rex IPAddressRE(RAW("\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"));
 
 Host::Host() {
   memset(&mAddr, 0, sizeof(struct sockaddr_in));
