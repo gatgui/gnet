@@ -26,7 +26,7 @@ USA.
 namespace gnet {
 
 Exception::Exception(const std::string &klass, const std::string &msg, bool useErrno) {
-  mMsg = "Net::";
+  mMsg = "gnet::";
   mMsg += klass;
   mMsg += " Error: ";
   mMsg += msg;

@@ -38,11 +38,17 @@ namespace gnet {
       Connection();
       virtual ~Connection();
       
-      virtual void read(char *&bytes, size_t &len) throw(Exception) = 0;
+      virtual void read(char *&bytes, size_t &len, const char *until=0) throw(Exception) = 0;
       virtual void write(const char* bytes, size_t len) throw(Exception) = 0;
       
       bool isValid() const;
       // bool isAlive() const;
+      
+      inline void write(const std::string &s) throw(Exception) {
+        if (s.length() > 0) {
+          write(s.c_str(), s.length());
+        }
+      }
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;
@@ -66,6 +72,7 @@ namespace gnet {
       sock_t mFD;
       unsigned long mBufferSize;
       char *mBuffer;
+      unsigned long mBufferOffset;
   };
   
   class GNET_API TCPConnection : public Connection {
@@ -76,7 +83,7 @@ namespace gnet {
       
       virtual ~TCPConnection();
       
-      virtual void read(char *&bytes, size_t &len) throw(Exception);
+      virtual void read(char *&bytes, size_t &len, const char *until=0) throw(Exception);
       virtual void write(const char* bytes, size_t len) throw(Exception);
       
       inline const Host& host() const {

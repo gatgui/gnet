@@ -23,12 +23,14 @@ USA.
 
 #include <gnet/connection.h>
 #include <exception>
+#include <cstring>
+#include <cstdlib>
 
 namespace gnet {
   
 
 Connection::Connection()
-  : mBufferSize(0), mBuffer(0) {
+  : mBufferSize(0), mBuffer(0), mBufferOffset(0) {
   setBufferSize(512);
 }
 
@@ -42,6 +44,7 @@ Connection::~Connection() {
     delete[] mBuffer;
     mBuffer = 0;
     mBufferSize = 0;
+    mBufferOffset = 0;
   }
 }
   
@@ -57,6 +60,7 @@ void Connection::setBufferSize(unsigned long n) {
     }
     mBuffer = new char[n];
     memset(mBuffer, 0, n*sizeof(char));
+    mBufferOffset = 0;
   }
   mBufferSize = n;
 }
@@ -74,7 +78,7 @@ TCPConnection::TCPConnection(TCPSocket *socket, sock_t fd, const Host &host)
 TCPConnection::~TCPConnection() {
 }
 
-void TCPConnection::read(char *&bytes, size_t &len) throw(Exception) {
+void TCPConnection::read(char *&bytes, size_t &len, const char *until) throw(Exception) {
   if (!isValid()) {
     throw Exception("TCPConnection", "Invalid connections.");
   }
@@ -85,6 +89,8 @@ void TCPConnection::read(char *&bytes, size_t &len) throw(Exception) {
   
   int n = 0;
   size_t allocated = 0;
+  bool full = false;
+  size_t searchOffset = 0;
   
   bytes = 0;
   len = 0;
@@ -92,7 +98,10 @@ void TCPConnection::read(char *&bytes, size_t &len) throw(Exception) {
   do {
     
     // flags ?
-    n = recv(mFD, mBuffer, mBufferSize, 0);
+    n = recv(mFD, mBuffer+mBufferOffset, mBufferSize-mBufferOffset, 0);
+    
+    full = (n == int(mBufferSize - mBufferOffset));
+    mBufferOffset = 0;
     
     if (n == -1) {
       // Should notify socket ?
@@ -110,6 +119,7 @@ void TCPConnection::read(char *&bytes, size_t &len) throw(Exception) {
       bytes = (char*) malloc(allocated+1);
       memcpy(bytes, mBuffer, n);
       bytes[len] = '\0';
+      searchOffset = 0;
       
     } else {
       if ((len + n) >= allocated) {
@@ -117,11 +127,29 @@ void TCPConnection::read(char *&bytes, size_t &len) throw(Exception) {
         bytes = (char*) realloc(bytes, allocated+1);
       }
       memcpy(bytes+len, mBuffer, n);
+      searchOffset = len;
       len += n;
       bytes[len] = '\0';
     }
     
-  } while (n == int(mBufferSize));
+    if (until != NULL) {
+      size_t ulen = strlen(until);
+      char *found = strstr(bytes+searchOffset, until);
+      if (found != NULL) {
+        size_t sublen = found + ulen - (bytes + searchOffset);
+        size_t rmnlen = n - sublen;
+        found[ulen] = '\0';
+        len -= rmnlen;
+        // keep remaining bits in buffer
+        mBufferOffset = rmnlen;
+        for (size_t i=0; i<rmnlen; ++i) {
+          mBuffer[i] = mBuffer[sublen+i];
+        }
+        return;
+      }
+    }
+    
+  } while (full);
 }
 
 void TCPConnection::write(const char *bytes, size_t len) throw(Exception) {

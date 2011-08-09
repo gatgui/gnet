@@ -28,6 +28,7 @@ USA.
 #include <string>
 #include <iostream>
 #include <exception>
+#include <cstring>
 
 #define MASK0  0x00FC0000
 #define MASK1  0x0003F000
@@ -41,10 +42,9 @@ USA.
 
 class Base64 {
 
-	public:
-		
-		
-		std::string encode(const std::string &in) {
+  public:
+    
+    std::string encode(const std::string &in) {
       std::string out = "";
       unsigned long tmp;
       size_t p = 0;
@@ -74,9 +74,9 @@ class Base64 {
         out.push_back('=');
       }
       return out;
-		}
-		
-		std::string decode(const std::string &in) {
+    }
+    
+    std::string decode(const std::string &in) {
       std::string out = "";
       unsigned long tmp;
       int npad;
@@ -113,8 +113,8 @@ class Base64 {
         p += 4;
       }
       return out;
-		}
-		
+    }
+    
   protected:
     
     static const char* msEncTable;
