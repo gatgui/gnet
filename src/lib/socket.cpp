@@ -29,21 +29,11 @@ USA.
 namespace gnet {
   
 Socket::Socket(unsigned short port) throw(Exception)
-  : mHost("localhost", port) {
-#ifdef _WIN32
-  mFD = INVALID_SOCKET;
-#else
-  mFD = -1;
-#endif
+  : mFD(NULL_SOCKET), mHost("localhost", port) {
 }
 
 Socket::Socket(const Host &host) throw(Exception)
-  : mHost(host) {
-#ifdef _WIN32
-  mFD = INVALID_SOCKET;
-#else
-  mFD = -1;
-#endif
+  : mFD(NULL_SOCKET), mHost(host) {
 }
 
 Socket::Socket(sock_t fd, const Host &host)
@@ -55,6 +45,10 @@ Socket::~Socket() {
 
 bool Socket::isValid() const {
   return (mFD != NULL_SOCKET);
+}
+
+void Socket::invalidate() {
+  mFD = NULL_SOCKET;
 }
 
 Socket::Socket() {
@@ -81,10 +75,10 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 
 TCPSocket::~TCPSocket() {
   
-  while (mConnections.size() > 0) {
-    delete mConnections.back();
-    mConnections.pop_back();
+  for (size_t i=0; i<mConnections.size(); ++i) {
+    delete mConnections[i];
   }
+  mConnections.clear();
   
   if (isValid()) {
 #ifdef _WIN32

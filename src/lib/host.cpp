@@ -41,7 +41,7 @@ Host::Host(const std::string &addr, unsigned short port) throw(Exception) {
   mAddr.sin_port = htons((u_short)port);
 
   if (IPAddressRE.match(addr) == true) {
-
+    
 #ifdef _WIN32
     mAddr.sin_addr.s_addr = inet_addr(addr.c_str());
 #else

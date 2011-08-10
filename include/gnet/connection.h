@@ -38,7 +38,8 @@ namespace gnet {
       Connection();
       virtual ~Connection();
       
-      virtual void read(char *&bytes, size_t &len, const char *until=0) throw(Exception) = 0;
+      // return value only meaning full for timeout > 0
+      virtual bool read(char *&bytes, size_t &len, const char *until=0, int timeout=-1) throw(Exception) = 0;
       virtual void write(const char* bytes, size_t len) throw(Exception) = 0;
       
       bool isValid() const;
@@ -83,7 +84,7 @@ namespace gnet {
       
       virtual ~TCPConnection();
       
-      virtual void read(char *&bytes, size_t &len, const char *until=0) throw(Exception);
+      virtual bool read(char *&bytes, size_t &len, const char *until=0, int timeout=-1) throw(Exception);
       virtual void write(const char* bytes, size_t len) throw(Exception);
       
       inline const Host& host() const {

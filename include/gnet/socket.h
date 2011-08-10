@@ -32,7 +32,9 @@ namespace gnet {
   
   class GNET_API Socket {
     public:
-  
+      
+      friend class Connection;
+      
       Socket(unsigned short port) throw(Exception);
       Socket(const Host &host) throw(Exception);
       virtual ~Socket();
@@ -53,6 +55,8 @@ namespace gnet {
       Socket(const Socket&);
       Socket& operator=(const Socket&);
       
+      void invalidate();
+      
     protected:
       
       Socket(sock_t fd, const Host &host);
@@ -64,6 +68,8 @@ namespace gnet {
   
   class GNET_API TCPSocket : public Socket {
     public:
+      
+      friend class TCPConnection;
       
       TCPSocket(unsigned short port) throw(Exception);
       TCPSocket(const Host &host) throw(Exception);
