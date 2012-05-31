@@ -9,16 +9,16 @@ int main(int argc, char **argv) {
     return -1;
   }
   
-	std::string server = "localhost";
-	unsigned short port = 8080;
-	
-	if (argc >= 2) {
-		server = argv[1];
-	}
-	
-	if (argc >= 3) {
-	  sscanf(argv[2], "%hu", &port);
-	}
+  std::string server = "localhost";
+  unsigned short port = 8080;
+
+  if (argc >= 2) {
+    server = argv[1];
+  }
+
+  if (argc >= 3) {
+    sscanf(argv[2], "%hu", &port);
+  }
 
   gnet::Initialize();
 

@@ -45,11 +45,11 @@ namespace gnet {
       bool isValid() const;
       // bool isAlive() const;
       
-      inline void write(const std::string &s) throw(Exception) {
-        if (s.length() > 0) {
-          write(s.c_str(), s.length());
-        }
-      }
+      // for some reasons, if those 2 following functions are named 'read' and 'write'
+      // calling them from TCPConnection instance will result in compilation error
+      // on linux...
+      bool reads(std::string &s, const char *until=0, int timeout=-1) throw(Exception);
+      void writes(const std::string &s) throw(Exception);
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;

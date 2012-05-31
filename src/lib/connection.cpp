@@ -68,6 +68,23 @@ void Connection::setBufferSize(unsigned long n) {
   mBufferSize = n;
 }
 
+bool Connection::reads(std::string &s, const char *until, int timeout) throw(Exception) {
+  char *bytes = 0;
+  size_t len = 0;
+  bool rv = this->read(bytes, len, until, timeout);
+  if (bytes != 0) {
+    s = bytes;
+    free(bytes);
+  } else {
+    s = "";
+  }
+  return rv;
+}
+
+void Connection::writes(const std::string &s) throw(Exception) {
+   this->write(s.c_str(), s.length());
+}
+
 // ---
 
 TCPConnection::TCPConnection()
@@ -182,7 +199,8 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
 #endif
     
     if (bytes == 0) {
-      len = allocated = n;
+      len = n;
+      allocated = n;
       bytes = (char*) malloc(allocated+1);
       memcpy(bytes, mBuffer, n);
       bytes[len] = '\0';
@@ -190,7 +208,9 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
       
     } else {
       if ((len + n) >= allocated) {
-        allocated <<= 1;
+        while (allocated < (len + n)) {
+          allocated <<= 1;
+        }
         bytes = (char*) realloc(bytes, allocated+1);
       }
       memcpy(bytes+len, mBuffer, n);
@@ -237,6 +257,10 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
 void TCPConnection::write(const char *bytes, size_t len) throw(Exception) {
   if (!isValid()) {
     throw Exception("TCPConnection", "Invalid connection.");
+  }
+  
+  if (len == 0) {
+    return;
   }
   
   // flags ?
