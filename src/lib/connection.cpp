@@ -263,23 +263,37 @@ void TCPConnection::write(const char *bytes, size_t len) throw(Exception) {
     return;
   }
   
-  // flags ?
-  int n = send(mFD, bytes, int(len), 0);
+  int offset = 0;
+  int remaining = int(len);
   
-  if (n == -1) {
-    if (errno != 0) {
-      // Should notify socket ?
-      throw Exception("TCPConnection", "Could not write to socket.", true);
-      
-    } else {
-      if (mSocket->fd() == mFD) {
-        mSocket->invalidate();
+  while (remaining > 0) {
+    
+    // flags ?
+    int n = send(mFD, bytes+offset, remaining, 0);
+    
+    if (n == -1) {
+      if (errno != 0) {
+        // Should notify socket ?
+        throw Exception("TCPConnection", "Could not write to socket.", true);
+        
+      } else {
+        if (mSocket->fd() == mFD) {
+          mSocket->invalidate();
+        }
+        mFD = NULL_SOCKET;
+        throw Exception("TCPConnection", "Connection was remotely closed.");
       }
-      mFD = NULL_SOCKET;
-      throw Exception("TCPConnection", "Connection was remotely closed.");
+    
+    } else {
+      remaining -= n;
+      offset += n;
+#ifdef _DEBUG
+      if (remaining > 0) {
+        std::cout << "gnet::TCPConnection::write: " << remaining << " bytes of " << len << " remains to send..." << std::endl;
+      }
+#endif
     }
   }
-  
 }
   
 }
