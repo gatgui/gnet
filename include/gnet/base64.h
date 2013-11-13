@@ -1,6 +1,6 @@
 /*
 
-Copyright (C) 2009  Gaetan Guidet
+Copyright (C) 2013  Gaetan Guidet
 
 This file is part of gnet.
 
@@ -21,12 +21,25 @@ USA.
 
 */
 
-#ifndef __gnet_gnet_
-#define __gnet_gnet_
+#ifndef __gnet_base64_h_
+#define __gnet_base64_h_
 
-#include <gnet/socket.h>
-#include <gnet/connection.h>
-#include <gnet/host.h>
-#include <gnet/base64.h>
+#include <gnet/config.h>
+#include <string>
+
+namespace gnet {
+  
+  class GNET_API Base64 {
+    public:
+    
+      size_t encodeLength(size_t inlen) const;
+      std::string encode(const void *data, size_t len) const;
+      std::string encode(const std::string &in) const;
+      
+      size_t decodeLength(const char *in, size_t inlen) const;
+      size_t decode(const std::string &in, void *data, size_t maxlen) const;
+      std::string decode(const std::string &in) const;
+  };
+}
 
 #endif

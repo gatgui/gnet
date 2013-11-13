@@ -21,14 +21,7 @@ USA.
 
 */
 
-#ifdef _WIN32
-# pragma warning(disable: 4702)
-#endif
-
-#include <string>
-#include <iostream>
-#include <exception>
-#include <cstring>
+#include <gnet/base64.h>
 
 #define MASK0  0x00FC0000
 #define MASK1  0x0003F000
@@ -40,106 +33,145 @@ USA.
 #define SHIFT2 6
 #define SHIFT3 0
 
-class Base64 {
+namespace gnet {
 
+static const char* gsEncTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static char* gsDecTable = NULL;
+
+class _Base64Init {
   public:
-    
-    std::string encode(const std::string &in) {
-      std::string out = "";
-      unsigned long tmp;
-      size_t p = 0;
-      size_t len = in.length();
-      while ((len - p) >= 3) {
-        tmp = static_cast<unsigned long>(in[p]) << 16;
-        tmp = tmp | static_cast<unsigned long>(in[p+1]) << 8;
-        tmp = tmp | static_cast<unsigned long>(in[p+2]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK0) >> SHIFT0)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK1) >> SHIFT1)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK2) >> SHIFT2)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK3) >> SHIFT3)]);
-        p += 3;
+    _Base64Init() {
+      gsDecTable = new char[256];
+      for (int i=0; i<64; ++i) {
+        gsDecTable[int(gsEncTable[i])] = char(i);
       }
-      if ((len - p) == 2) {
-        tmp = static_cast<unsigned long>(in[p]) << 16;
-        tmp = tmp | static_cast<unsigned long>(in[p+1]) << 8;
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK0) >> SHIFT0)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK1) >> SHIFT1)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK2) >> SHIFT2)]);
-        out.push_back('=');
-      } else if ((len - p) == 1) {
-        tmp = static_cast<unsigned long>(in[p]) << 16;
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK0) >> SHIFT0)]);
-        out.push_back(msEncTable[static_cast<int>((tmp & MASK1) >> SHIFT1)]);
-        out.push_back('=');
-        out.push_back('=');
-      }
-      return out;
     }
-    
-    std::string decode(const std::string &in) {
-      std::string out = "";
-      unsigned long tmp;
-      int npad;
-      size_t p = 0;
-      size_t len = in.length();
-      while ((len - p) > 0) {
-        tmp = 0;
-        npad = 0;
-        for (int i=0; i<4; ++i) {
-          char c = in[p+i];
-          if (c != '=') {
-            const char *f = strchr(msEncTable, static_cast<int>(c));
-            if (f == NULL) {
-              throw "Invalid base64 encoded string";
-            }
-            unsigned long index = (unsigned long)(f - msEncTable);
-            tmp = tmp | ((index & 0x0000003F) << (6 * (3 - i)));
-          } else {
-            ++npad;
-          }
-        }
-        if (npad == 0) {
-          out.push_back(static_cast<char>((tmp & 0x00FF0000) >> 16));
-          out.push_back(static_cast<char>((tmp & 0x0000FF00) >> 8));
-          out.push_back(static_cast<char>((tmp & 0x000000FF)));
-        } else if (npad == 1) {
-          out.push_back(static_cast<char>((tmp & 0x00FF0000) >> 16));
-          out.push_back(static_cast<char>((tmp & 0x0000FF00) >> 8));
-        } else if (npad == 2) {
-          out.push_back(static_cast<char>((tmp & 0x00FF0000) >> 16));
-        } else {
-          throw "Invalid base64 encoded string";
-        }
-        p += 4;
-      }
-      return out;
+    ~_Base64Init() {
+      delete[] gsDecTable;
     }
-    
-  protected:
-    
-    static const char* msEncTable;
 };
 
-const char * Base64::msEncTable =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static _Base64Init _b64init;
 
-/*
-int main(int argc, char **argv) {
-  if (argc != 3) {
-    std::cout << "Usage: base64 <string>" << std::endl;
-    return -1;
-  }
-  Base64 encdec;
-  std::string str = argv[2];
-  if (strcmp(argv[1], "--decode") == 0) {
-    std::string dec = encdec.decode(str);
-    std::cout << "\"" << str << "\" -> \"" << dec << "\"" << std::endl;
-  } else if (strcmp(argv[1], "--encode") == 0) {
-    std::string enc = encdec.encode(str);
-    std::cout << "\"" << str << "\" -> \"" << enc << "\"" << std::endl;
-  } else {
-    std::cout << "Invalid options: " << argv[1] << std::endl;
-  }
-  return 0;
+// ---
+
+size_t Base64::encodeLength(size_t inlen) const {
+  return (4 * ((inlen / 3) + (inlen % 3 ? 1 : 0)));
 }
-*/
+
+std::string Base64::encode(const void *data, size_t len) const {
+  if (!data) {
+    return "";
+  }
+  
+  std::string out = "";
+  unsigned long tmp;
+  size_t p = 0;
+  const unsigned char *bytes = (const unsigned char*) data;
+  
+  while ((len - p) >= 3) {
+    tmp = (bytes[p] << 16) | (bytes[p+1] << 8) | bytes[p+2];
+    out.push_back(gsEncTable[(tmp & MASK0) >> SHIFT0]);
+    out.push_back(gsEncTable[(tmp & MASK1) >> SHIFT1]);
+    out.push_back(gsEncTable[(tmp & MASK2) >> SHIFT2]);
+    out.push_back(gsEncTable[(tmp & MASK3) >> SHIFT3]);
+    p += 3;
+  }
+  
+  if ((len - p) == 2) {
+    tmp = (bytes[p] << 16) | (bytes[p+1] << 8);
+    out.push_back(gsEncTable[(tmp & MASK0) >> SHIFT0]);
+    out.push_back(gsEncTable[(tmp & MASK1) >> SHIFT1]);
+    out.push_back(gsEncTable[(tmp & MASK2) >> SHIFT2]);
+    out.push_back('=');
+    
+  } else if ((len - p) == 1) {
+    tmp = (bytes[p] << 16);
+    out.push_back(gsEncTable[(tmp & MASK0) >> SHIFT0]);
+    out.push_back(gsEncTable[(tmp & MASK1) >> SHIFT1]);
+    out.push_back('=');
+    out.push_back('=');
+  }
+  
+  return out;
+}
+
+std::string Base64::encode(const std::string &in) const {
+  return encode(in.c_str(), in.length());
+}
+
+size_t Base64::decodeLength(const char *in, size_t inlen) const {
+  if (inlen == 0 || (inlen % 4) != 0) {
+    return 0;
+  } else {
+    return (3 * (inlen / 4) - (in[inlen-1] == '=' ? (in[inlen-2] == '=' ? 2 : 1) : 0));
+  }
+}
+
+size_t Base64::decode(const std::string &in, void *data, size_t maxlen) const {
+  size_t declen = decodeLength(in.c_str(), in.length());
+  
+  if (!data || maxlen < declen || declen == 0) {
+    return 0;
+  }
+  
+  unsigned long tmp;
+  int npad;
+  size_t p = 0;
+  size_t outp = 0;
+  size_t len = in.length();
+  unsigned char *out = (unsigned char*) data;
+  
+  while ((len - p) > 0) {
+    tmp = 0;
+    npad = 0;
+    
+    for (int i=0, o=18; i<4; ++i, o-=6) {
+      char c = in[p+i];
+      if (c != '=') {
+        tmp |= (gsDecTable[int(c)] << o);
+      } else {
+        ++npad;
+      }
+    }
+    
+    if (npad == 0) {
+      out[outp++] = (tmp & 0x00FF0000) >> 16;
+      out[outp++] = (tmp & 0x0000FF00) >> 8;
+      out[outp++] = (tmp & 0x000000FF);
+      
+    } else if (npad == 1) {
+      out[outp++] = (tmp & 0x00FF0000) >> 16;
+      out[outp++] = (tmp & 0x0000FF00) >> 8;
+      
+    } else if (npad == 2) {
+      out[outp++] = (tmp & 0x00FF0000) >> 16;
+      
+    } else {
+      return 0;
+    }
+    
+    p += 4;
+  }
+  
+  return outp;
+}
+
+std::string Base64::decode(const std::string &in) const {
+  size_t len = decodeLength(in.c_str(), in.length());
+  if (len > 0) {
+    char *buffer = (char*) malloc(len+1);
+    if (decode(in, buffer, len) != 0) {
+      buffer[len] = '\0';
+      std::string rv(buffer);
+      return rv;
+    } else {
+      free(buffer);
+      return "";
+    }
+  } else {
+    return "";
+  }
+}
+
+}
