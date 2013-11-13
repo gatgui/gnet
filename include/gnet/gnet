@@ -27,6 +27,5 @@ USA.
 #include <gnet/socket.h>
 #include <gnet/connection.h>
 #include <gnet/host.h>
-#include <gnet/base64.h>
 
 #endif
