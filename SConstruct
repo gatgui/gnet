@@ -1,6 +1,21 @@
 import os
 import glob
-import excons
+
+initsubs = False
+
+try:
+    import excons
+    if len(glob.glob("gcore/*")) == 0:
+        initsubs = True
+except:
+    initsubs = True
+
+if initsubs:
+    import subprocess
+    subprocess.Popen("git submodule init", shell=True).communicate()
+    subprocess.Popen("git submodule update", shell=True).communicate()
+    
+    import excons
 
 static = int(ARGUMENTS.get("static", "0"))
 liblibs = [] if static else ["gcore"]
