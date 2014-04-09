@@ -3,21 +3,29 @@ import glob
 
 initsubs = False
 
+static = (int(ARGUMENTS.get("static", "0")) != 0)
+
 try:
-    import excons
-    if len(glob.glob("gcore/*")) == 0:
-        initsubs = True
+  import excons
+  if len(glob.glob("gcore/*")) == 0:
+    # No files in gcore directory
+    prefix = ARGUMENTS.get("with-gcore", None)
+    inc = ARGUMENTS.get("with-gcore-inc", None)
+    if (static and (inc or prefix)) or (not static and prefix):
+      # gcore externally provided
+      pass
+    else:
+      initsubs = True
 except:
     initsubs = True
 
 if initsubs:
-    import subprocess
-    subprocess.Popen("git submodule init", shell=True).communicate()
-    subprocess.Popen("git submodule update", shell=True).communicate()
-    
-    import excons
+  import subprocess
+  subprocess.Popen("git submodule init", shell=True).communicate()
+  subprocess.Popen("git submodule update", shell=True).communicate()
+  
+  import excons
 
-static = int(ARGUMENTS.get("static", "0"))
 liblibs = [] if static else ["gcore"]
 libdirs = []
 
