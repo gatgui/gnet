@@ -71,6 +71,7 @@ typedef int socklen_t;
 # include <arpa/inet.h>
 # include <netdb.h>
 # include <errno.h>
+# include <unistd.h>
 typedef int sock_t;
 #define NULL_SOCKET -1
 //# define socket_close          ::close
