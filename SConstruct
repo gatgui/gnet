@@ -60,6 +60,7 @@ prjs = [
     "srcs"         : glob.glob("src/lib/*.cpp"),
     "defs"         : ["GNET_STATIC"] if static else ["GNET_EXPORTS"] ,
     "incdirs"      : ["include"],
+    "install"      : {"include": ["include/gnet"]},
     "custom"       : [RequireGcore(subdir="gcore")]
   },
   { "name"    : "gnet_tests",
