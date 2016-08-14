@@ -71,3 +71,5 @@ prjs = [
 
 env = excons.MakeBaseEnv()
 excons.DeclareTargets(env, prjs)
+
+Default(["gnet"])
