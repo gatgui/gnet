@@ -1,11 +1,33 @@
 import os
 import glob
 import excons
+from excons.tools import threads
+from excons.tools import dl
 
 static = (excons.GetArgument("static", 0, int) != 0)
 
-SConscript("gcore/SConstruct")
-Import("RequireGcore")
+
+gcore_inc, gcore_lib = excons.GetDirs("gcore", silent=True)
+
+if gcore_inc is None and gcore_lib is None:
+  SConscript("gcore/SConstruct")
+  Import("RequireGcore")
+else:
+  # Define our own RequireGcore
+  def RequireGcore(*args, **kwargs):
+    def _Require(env):
+      env.Append(CPPPATH=[gcore_inc])
+      env.Append(LIBPATH=[gcore_lib])
+      env.Append(LIBS=["gcore"])
+      if not str(Platform()) in ["win32", "darwin"]:
+        env.Append(LIBS=["rt"])
+      if static:
+        env.Append(CPPDEFINES=["GCORE_STATIC"])
+        threads.Require(env)
+        dl.Require(env)
+    
+    return _Require
+
 
 def RequireGnet(subdir=None):
   if subdir and type(subdir) in (str, unicode):
