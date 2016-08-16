@@ -1,5 +1,5 @@
-#include <gcore/gcore>
-#include <gnet/gnet>
+#include <gcore/all.h>
+#include <gnet/all.h>
 #include <exception>
 
 int main(int argc, char **argv) {
