@@ -6,18 +6,22 @@ from excons.tools import dl
 
 static = (excons.GetArgument("static", 0, int) != 0)
 
-
 gcore_inc, gcore_lib = excons.GetDirs("gcore", silent=True)
 
 if gcore_inc is None and gcore_lib is None:
-  SConscript("gcore/SConstruct")
-  Import("RequireGcore")
+  try:
+    Import("RequireGcore")
+  except:
+    SConscript("gcore/SConstruct")
+    Import("RequireGcore")
 else:
   # Define our own RequireGcore
   def RequireGcore(*args, **kwargs):
     def _Require(env):
-      env.Append(CPPPATH=[gcore_inc])
-      env.Append(LIBPATH=[gcore_lib])
+      if gcore_inc:
+        env.Append(CPPPATH=[gcore_inc])
+      if gcore_lib:
+        env.Append(LIBPATH=[gcore_lib])
       env.Append(LIBS=["gcore"])
       if not str(Platform()) in ["win32", "darwin"]:
         env.Append(LIBS=["rt"])
@@ -29,24 +33,15 @@ else:
     return _Require
 
 
-def RequireGnet(subdir=None):
-  if subdir and type(subdir) in (str, unicode):
-    if not (subdir.endswith("/") or subdir.endswith("\\")):
-      subdir += "/"
-  else:
-    subdir = ""
-
-  def _Require(env):
-    env.Append(CPPPATH=[subdir+"include"])
-    # Don't need to set LIBPATH, library output directory is automatically added by excons
-    env.Append(LIBS=["gnet"])
-    
-    if static:
-      env.Append(CPPDEFINES=["GNET_STATIC"])
-    
-    RequireGcore(subdir=subdir+"gcore")(env)
-
-  return _Require
+def RequireGnet(env):
+  # Don't need to set CPPPATH, headers are now installed in output directory
+  # Don't need to set LIBPATH, library output directory is automatically added by excons
+  env.Append(LIBS=["gnet"])
+  
+  if static:
+    env.Append(CPPDEFINES=["GNET_STATIC"])
+  
+  RequireGcore(env)
 
 Export("RequireGnet")
 
@@ -54,19 +49,18 @@ Export("RequireGnet")
 prjs = [
   { "name"         : "gnet",
     "type"         : "staticlib" if static else "sharedlib",
-    "version"      : "0.1.3",
+    "version"      : "0.1.4",
     "soname"       : "libgnet.so.0",
     "install_name" : "libgnet.0.dylib",
     "srcs"         : glob.glob("src/lib/*.cpp"),
     "defs"         : ["GNET_STATIC"] if static else ["GNET_EXPORTS"] ,
-    "incdirs"      : ["include"],
     "install"      : {"include": ["include/gnet"]},
-    "custom"       : [RequireGcore(subdir="gcore")]
+    "custom"       : [RequireGcore]
   },
   { "name"    : "gnet_tests",
     "type"    : "testprograms",
     "srcs"    : glob.glob("src/tests/*.cpp"),
-    "custom"  : [RequireGnet()]
+    "custom"  : [RequireGnet]
   }
 ]
 
