@@ -38,18 +38,23 @@ namespace gnet {
       Connection();
       virtual ~Connection();
       
-      // return value only meaning full for timeout > 0
-      virtual bool read(char *&bytes, size_t &len, const char *until=0, int timeout=-1) throw(Exception) = 0;
+      // timeout < 0 -> blocking
+      // timeout = 0 -> non-blocking
+      // timeout > 0 -> non-blocking + time limit
+      // timeout is in milliseconds
+      // return true when something is read
+      virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
+      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
       virtual void write(const char* bytes, size_t len) throw(Exception) = 0;
       
       bool isValid() const;
       // bool isAlive() const;
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
-      // calling them from TCPConnection instance will result in compilation error
-      // on linux...
-      bool reads(std::string &s, const char *until=0, int timeout=-1) throw(Exception);
-      void writes(const std::string &s) throw(Exception);
+      // calling them from TCPConnection instance resulted in compilation error on linux...
+      bool sread(std::string &s, int timeout=-1) throw(Exception);
+      bool sreadUntil(const char *until, std::string &s, int timeout=-1) throw(Exception);
+      void swrite(const std::string &s) throw(Exception);
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;
@@ -84,7 +89,8 @@ namespace gnet {
       
       virtual ~TCPConnection();
       
-      virtual bool read(char *&bytes, size_t &len, const char *until=0, int timeout=-1) throw(Exception);
+      virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception);
+      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception);
       virtual void write(const char* bytes, size_t len) throw(Exception);
       
       inline const Host& host() const {

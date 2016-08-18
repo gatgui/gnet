@@ -79,9 +79,14 @@ namespace gnet {
       void listen(int maxConnections) throw(Exception);
       void bindAndListen(int maxConnections) throw(Exception);
       
-      TCPConnection* acceptConnection() throw(Exception);
+      // timeout in milliseconds
+      // <0: blocking
+      // =0: non-blocking
+      // >0: non-blocking + timeout
+      size_t select(double timeout=-1) throw(Exception);
+      TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
-      void closeConnection(TCPConnection*);
+      void close(TCPConnection*);
     
     protected:
       

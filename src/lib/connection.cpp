@@ -23,6 +23,7 @@ USA.
 
 #include <gnet/connection.h>
 #include <gnet/socket.h>
+#include <gcore/time.h>
 #include <exception>
 #include <cstring>
 #include <cstdlib>
@@ -68,10 +69,10 @@ void Connection::setBufferSize(unsigned long n) {
   mBufferSize = n;
 }
 
-bool Connection::reads(std::string &s, const char *until, int timeout) throw(Exception) {
+bool Connection::sread(std::string &s, const char *until, double timeout) throw(Exception) {
   char *bytes = 0;
   size_t len = 0;
-  bool rv = this->read(bytes, len, until, timeout);
+  bool rv = this->read(bytes, len, timeout);
   if (bytes != 0) {
     s = bytes;
     free(bytes);
@@ -81,7 +82,20 @@ bool Connection::reads(std::string &s, const char *until, int timeout) throw(Exc
   return rv;
 }
 
-void Connection::writes(const std::string &s) throw(Exception) {
+bool Connection::sreadUntil(const char *until, std::string &s, double timeout) throw(Exception) {
+  char *bytes = 0;
+  size_t len = 0;
+  bool rv = this->readUntil(until, bytes, len, timeout);
+  if (bytes != 0) {
+    s = bytes;
+    free(bytes);
+  } else {
+    s = "";
+  }
+  return rv;
+}
+
+void Connection::swrite(const std::string &s) throw(Exception) {
    this->write(s.c_str(), s.length());
 }
 
@@ -98,7 +112,11 @@ TCPConnection::TCPConnection(TCPSocket *socket, sock_t fd, const Host &host)
 TCPConnection::~TCPConnection() {
 }
 
-bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeout) throw(Exception) {
+bool TCPConnection::read(char *&bytes, size_t &len, double timeout) throw(Exception) {
+  return readUntil(NULL, bytes, len, timeout);
+}
+
+bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, double timeout) throw(Exception) {
   if (!isValid()) {
     throw Exception("TCPConnection", "Invalid connections.");
   }
@@ -119,12 +137,11 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
   std::cout << "gnet::TCPConnection::read: until \"" << (until ? until : "") << "\"" << std::endl;
 #endif
   
-  if (until != NULL && mBufferOffset > 0)
-  {
+  // Check for until string if set
+  if (until != NULL && mBufferOffset > 0) {
     size_t ulen = strlen(until);
     char *found = strstr(mBuffer, until);
-    if (found != NULL)
-    {
+    if (found != NULL) {
 #ifdef _DEBUG
       std::cout << "gnet::TCPConnection::read: until found in remaining buffer" << std::endl;
 #endif
@@ -146,15 +163,17 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
     }
   }
   
-  time_t st, et;
+  //time_t st, et;
   
-  st = time(NULL);
+  //st = time(NULL);
+  gcore::TimeCounter st(gcore::TimeCounter::MilliSeconds);
   
   do {
     
     if (timeout > 0) {
-      et = time(NULL);
-      if ((et - st) >= time_t(timeout)) {
+      //et = time(NULL);
+      //if ((et - st) >= time_t(timeout)) {
+      if (st.elapsed().value() > timeout) {
         // return current state
         return false;
       }
@@ -166,9 +185,13 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
     
     if (n == -1) {
       // Should notify socket ?
+      // EWOULDBLOCK?
       if (timeout > 0 && errno == EAGAIN) {
         continue;
       }
+      // if 0 -> non-blocking
+      // return false and set 0 in bytes?
+      
       if (bytes) {
          free(bytes);
          bytes = 0;
@@ -222,7 +245,8 @@ bool TCPConnection::read(char *&bytes, size_t &len, const char *until, int timeo
 #ifdef _DEBUG
     std::cout << "gnet::TCPConnection::read: \"" << (bytes+len-n) << "\"" << std::endl;
 #endif
-        
+    
+    // Check for until string if set
     if (until != NULL) {
       size_t ulen = strlen(until);
       char *found = strstr(bytes+searchOffset, until);

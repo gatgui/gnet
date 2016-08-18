@@ -22,6 +22,7 @@ USA.
 */
 
 #include <gnet/socket.h>
+#include <gcore/time.h>
 #include <exception>
 #include <sstream>
 #include <algorithm>
@@ -107,7 +108,7 @@ void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
   this->listen(maxConnections);
 }
 
-void TCPSocket::closeConnection(TCPConnection *conn) {
+void TCPSocket::close(TCPConnection *conn) {
   if (conn) {
     
     std::vector<TCPConnection*>::iterator it =
@@ -122,6 +123,10 @@ void TCPSocket::closeConnection(TCPConnection *conn) {
 #else
         ::close(conn->fd());
 #endif
+        // should this be move to outer scope? is it actually really needed?
+        if (FD_ISSET(conn->fd(), &mRead)) {
+          FD_CLR(conn->fd(), &mRead);
+        }
       }
       
       // destroy it
@@ -144,7 +149,7 @@ TCPConnection* TCPSocket::connect() throw(Exception) {
   return mConnections.back();
 }
 
-TCPConnection* TCPSocket::acceptConnection() throw(Exception) {
+TCPConnection* TCPSocket::accept() throw(Exception) {
   
   Host h;
   
@@ -160,8 +165,48 @@ TCPConnection* TCPSocket::acceptConnection() throw(Exception) {
   return mConnections.back();
 }
 
-//void TCPSocket::select() throw(Exception) {
-//}
+size_t TCPSocket::select(double timeout) throw(Exception) {
+  struct timeval _tv;
+  struct timeval *tv = 0;
+  
+  if (timeout >= 0) {
+    if (timeout > 0) {
+      double total = gcore::TimeCounter::ConvertUnits(timeout, gcore::TimeCounter::MilliSeconds, gcore::TimeCounter::Seconds);
+      double secs = floor(total);
+      double remain = total - secs;
+      double usecs = floor(0.5 + gcore::TimeCounter::ConvertUnits(remain, gcore::TimeCounter::Seconds, gcore::TimeCounter::MicroSeconds));
+      
+      _tv.tv_sec = (long) secs;
+      _tv.tv_usec = (long) usecs;
+      
+    } else {
+      _tv.tv_sec = 0;
+      _tv.tv_usec = 0;
+    }
+    
+    tv = &_tv;
+  }
+  
+  FD_ZERO(&mRead);
+  FD_SET(mFD, &mRead);
+  
+  int rv = ::select(mFD+1, &mRead, NULL, NULL, tv);
+  
+  if (rv == -1) {
+    throw Exception("TCPSocket", "", true);
+  
+  } else if (rv > 0) {
+    // -> accept won't block!
+    //    if we have more than one connection?
+    
+  }
+  
+  return size_t(rv);
+  
+  // int
+  //    select(int nfds, fd_set *restrict readfds, fd_set *restrict writefds, fd_set *restrict errorfds,
+  //        struct timeval *restrict timeout);
+}
 
 TCPSocket::TCPSocket() {
 }

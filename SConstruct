@@ -49,9 +49,9 @@ Export("RequireGnet")
 prjs = [
   { "name"         : "gnet",
     "type"         : "staticlib" if static else "sharedlib",
-    "version"      : "0.1.4",
-    "soname"       : "libgnet.so.0",
-    "install_name" : "libgnet.0.dylib",
+    "version"      : "1.0.0",
+    "soname"       : "libgnet.so.1",
+    "install_name" : "libgnet.1.dylib",
     "srcs"         : glob.glob("src/lib/*.cpp"),
     "defs"         : ["GNET_STATIC"] if static else ["GNET_EXPORTS"] ,
     "install"      : {"include": ["include/gnet"]},
