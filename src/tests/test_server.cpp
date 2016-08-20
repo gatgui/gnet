@@ -18,7 +18,7 @@ int main(int, char**) {
       size_t len = 0;
       
       std::cout << "Accept new connection...";
-      gnet::TCPConnection *conn = socket.acceptConnection();
+      gnet::TCPConnection *conn = socket.accept();
       std::cout << "DONE" << std::endl;
       
       std::cout << "Read data from connection...";
@@ -32,7 +32,7 @@ int main(int, char**) {
       free(buffer);
       
       std::cout << "Close connection...";
-      socket.closeConnection(conn);
+      socket.close(conn);
       std::cout << "DONE" << std::endl;
     }
     

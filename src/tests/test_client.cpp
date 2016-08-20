@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     }
       
     std::cout << "Close connection...";
-    socket.closeConnection(conn);
+    socket.close(conn);
     std::cout << "DONE" << std::endl;
     
   } catch (std::exception &e) {
