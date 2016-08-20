@@ -68,19 +68,34 @@ Socket& Socket::operator=(const Socket&) {
 TCPSocket::TCPSocket(unsigned short port) throw(Exception)
   : Socket(port) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
+  mCurReadConnection = mReadConnections.end();
+  mCurWriteConnection = mWriteConnections.end();
 }
 
 TCPSocket::TCPSocket(const Host &host) throw(Exception)
   : Socket(host) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
+  mCurReadConnection = mReadConnections.end();
+  mCurWriteConnection = mWriteConnections.end();
 }
 
 TCPSocket::~TCPSocket() {
   
-  for (size_t i=0; i<mConnections.size(); ++i) {
-    delete mConnections[i];
+  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    TCPConnection *conn = *it;
+    if (conn->isValid() && conn->fd() != mFD) {
+#ifdef _WIN32
+      closesocket(mFD);
+#else
+      ::close(mFD);
+#endif
+    }
+    delete conn;
   }
+  
   mConnections.clear();
+  mReadConnections.clear();
+  mWriteConnections.clear();
   
   if (isValid()) {
 #ifdef _WIN32
@@ -112,20 +127,32 @@ void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
 void TCPSocket::close(TCPConnection *conn) {
   if (conn) {
     
-    std::vector<TCPConnection*>::iterator it =
-      std::find(mConnections.begin(), mConnections.end(), conn);
+    ConnectionList::iterator it = std::find(mConnections.begin(), mConnections.end(), conn);
     
     if (it != mConnections.end()) {
       
       mConnections.erase(it);
       
-      it = std::find(mReadyConnections.begin(), mReadyConnections.end(), conn);
-      if (it != mReadyConnections.end()) {
-        mReadyConnections.erase(it);
+      it = std::find(mReadConnections.begin(), mReadConnections.end(), conn);
+      if (it != mReadConnections.end()) {
+        bool upd = (mCurReadConnection == it);
+        it = mReadConnections.erase(it);
+        if (upd) {
+          mCurReadConnection = it;
+        }
+      }
+      
+      it = std::find(mWriteConnections.begin(), mWriteConnections.end(), conn);
+      if (it != mWriteConnections.end()) {
+        bool upd = (mCurWriteConnection == it);
+        it = mWriteConnections.erase(it);
+        if (upd) {
+          mCurWriteConnection = it;
+        }
       }
       
       // do not close connection that have same id
-      if (conn->fd() != NULL_SOCKET && conn->fd() != fd()) {
+      if (conn->isValid() && conn->fd() != fd()) {
 #ifdef _WIN32
         closesocket(conn->fd());
 #else
@@ -175,9 +202,18 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   return conn;
 }
 
-size_t TCPSocket::select(double timeout) throw(Exception) {
+size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exception) {
   struct timeval _tv;
   struct timeval *tv = 0;
+  int curfd, maxfd = -1;
+  fd_set _readfds;
+  fd_set _writefds;
+  fd_set *readfds = (readable ? &_readfds : NULL);
+  fd_set *writefds = (writable ? &_writefds : NULL);
+  
+  if (!readable && !writable) {
+    return 0;
+  }
   
   if (timeout >= 0) {
     if (timeout > 0) {
@@ -197,77 +233,111 @@ size_t TCPSocket::select(double timeout) throw(Exception) {
     tv = &_tv;
   }
   
-  int curfd, maxfd = (int) mFD;
+  if (readable) {
+    FD_ZERO(readfds);
+    // for new connections
+    FD_SET(mFD, readfds);
+    maxfd = mFD;
+  }
   
-  FD_ZERO(&mRead);
-  FD_SET(mFD, &mRead);
+  if (writable) {
+    FD_ZERO(writefds);
+    // FD_SET(mFD, &writefds);
+  }
   
-  for (size_t i=0; i<mConnections.size(); ++i) {
-    TCPConnection *conn = mConnections[i];
+  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    TCPConnection *conn = *it;
+    
     if (conn->isValid()) {
-      FD_SET(conn->fd(), &mRead);
+      if (readable) {
+        FD_SET(conn->fd(), readfds);
+      }
+      
+      if (writable) {
+        FD_SET(conn->fd(), writefds);
+      }
+      
       curfd = (int) conn->fd();
+      
       if (curfd > maxfd) {
         maxfd = curfd;
       }
     }
   }
   
-  mReadyConnections.clear();
-  
-  int rv = ::select(maxfd+1, &mRead, NULL, NULL, tv);
+  mReadConnections.clear();
+  mWriteConnections.clear();
+  mCurReadConnection = mReadConnections.begin();
+  mCurWriteConnection = mWriteConnections.begin();
+    
+  int rv = ::select(maxfd+1, readfds, writefds, NULL, tv);
   
   if (rv == -1) {
     throw Exception("TCPSocket", "", true);
+  }
   
-  } else if (rv > 0) {
-    if (FD_ISSET(mFD, &mRead)) {
-      // new connection, accept won't block
-      TCPConnection *conn = this->accept();
-      mReadyConnections.push_back(conn);
+  if (readable) {
+    if (FD_ISSET(mFD, readfds)) {
+      this->accept();
     }
-    
-    for (size_t i=0; i<mConnections.size(); ++i) {
-      TCPConnection *conn = mConnections[i];
-      if (conn->isValid() && FD_ISSET(conn->fd(), &mRead)) {
-        mReadyConnections.push_back(conn);
+  }
+  
+  // if (writable) {
+  //   if (FD_ISSET(mFD, &writefds)) {
+  //   }
+  // }
+  
+  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    TCPConnection *conn = *it;
+    if (!conn->isValid()) {
+      continue;
+    }
+    if (readable) {
+      if (FD_ISSET(conn->fd(), readfds)) {
+        mReadConnections.push_back(conn);
+      }
+    }
+    if (writable) {
+      if (FD_ISSET(conn->fd(), writefds)) {
+        mWriteConnections.push_back(conn);
       }
     }
   }
   
-  return mReadyConnections.size();
+  mCurReadConnection = mReadConnections.begin();
+  mCurWriteConnection = mWriteConnections.begin();
+  
+  return (mReadConnections.size() + mWriteConnections.size());
 }
 
-TCPConnection* TCPSocket::next(TCPConnection *prevConn) {
-  TCPConnection *nextConn = NULL;
-  std::vector<TCPConnection*>::iterator it;
-  
-  if (!prevConn) {
-    if (mReadyConnections.size() == 0) {
-      return NULL;
-    
-    } else {
-      it = mReadyConnections.begin();
+TCPConnection* TCPSocket::nextReadable() {
+  TCPConnection *rv = NULL;
+  while (mCurReadConnection != mReadConnections.end()) {
+    TCPConnection *conn = *mCurReadConnection;
+    if (conn->isValid()) {
+      rv = conn;
     }
-  
-  } else {
-    it = std::find(mReadyConnections.begin(), mReadyConnections.end(), prevConn);
-    if (it == mReadyConnections.end()) {
-      return NULL;
-    } else {
-      ++it;
+    ++mCurReadConnection;
+    if (rv) {
+      break;
     }
   }
-  
-  while (it != mReadyConnections.end()) {
-    nextConn = *it;
-    if (nextConn->isValid()) {
-      return nextConn;
+  return rv;
+}
+
+TCPConnection* TCPSocket::nextWritable() {
+  TCPConnection *rv = NULL;
+  while (mCurWriteConnection != mWriteConnections.end()) {
+    TCPConnection *conn = *mCurWriteConnection;
+    if (conn->isValid()) {
+      rv = conn;
     }
-    ++it;
+    ++mCurWriteConnection;
+    if (rv) {
+      break;
+    }
   }
-  
-  return NULL;
+  return rv;
 }
 
 TCPSocket::TCPSocket() {

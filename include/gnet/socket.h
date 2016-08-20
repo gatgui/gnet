@@ -26,7 +26,7 @@ USA.
 
 #include <gnet/config.h>
 #include <gnet/connection.h>
-#include <vector>
+#include <list>
 
 namespace gnet {
   
@@ -83,11 +83,12 @@ namespace gnet {
       // <0: blocking
       // =0: non-blocking
       // >0: non-blocking + timeout
-      size_t select(double timeout=-1) throw(Exception);
-      // after a select, call 'next' in loop until NULL is return to iterate
-      // connections that are ready
-      // 'prevConn' must be NULL on first call
-      TCPConnection* next(TCPConnection *prevConn);
+      inline size_t select(double timeout=-1) { return this->select(true, true, timeout); }
+      inline size_t selectReadable(double timeout=-1) { return this->select(true, false, timeout); }
+      inline size_t selectWritable(double timeout=-1) { return this->select(false, true, timeout); }
+      // To use after a select and before next one
+      TCPConnection* nextReadable();
+      TCPConnection* nextWritable();
       
       TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
@@ -99,14 +100,21 @@ namespace gnet {
       TCPSocket(const TCPSocket&);
       TCPSocket& operator=(const TCPSocket&);
       
+      size_t select(bool readable, bool writable, double timeout) throw(Exception);
+      
     protected:
       
       int mMaxConnections;
-      //int mMaxClients;
-      std::vector<TCPConnection*> mConnections;
-      std::vector<TCPConnection*> mReadyConnections;
-      fd_set mRead;
-      fd_set mWrite;
+      
+      typedef std::list<TCPConnection*> ConnectionList;
+      
+      ConnectionList mConnections;
+      ConnectionList mReadConnections;
+      ConnectionList mWriteConnections;
+      ConnectionList::iterator mCurReadConnection;
+      ConnectionList::iterator mCurWriteConnection;
+      
+      
   };
   
 }
