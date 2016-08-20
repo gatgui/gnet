@@ -45,7 +45,7 @@ namespace gnet {
       // return true when something is read
       virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
       virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
-      virtual void write(const char* bytes, size_t len) throw(Exception) = 0;
+      virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception) = 0;
       
       bool isValid() const;
       void invalidate();
@@ -55,7 +55,7 @@ namespace gnet {
       // calling them from TCPConnection instance resulted in compilation error on linux...
       bool sread(std::string &s, double timeout=-1) throw(Exception);
       bool sreadUntil(const char *until, std::string &s, double timeout=-1) throw(Exception);
-      void swrite(const std::string &s) throw(Exception);
+      bool swrite(const std::string &s, double timeout=-1) throw(Exception);
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;
@@ -94,7 +94,7 @@ namespace gnet {
       
       virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception);
       virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception);
-      virtual void write(const char* bytes, size_t len) throw(Exception);
+      virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception);
       
       inline const Host& host() const {
         return mHost;

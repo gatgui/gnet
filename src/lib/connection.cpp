@@ -118,8 +118,8 @@ bool Connection::sreadUntil(const char *until, std::string &s, double timeout) t
   return rv;
 }
 
-void Connection::swrite(const std::string &s) throw(Exception) {
-   this->write(s.c_str(), s.length());
+bool Connection::swrite(const std::string &s, double timeout) throw(Exception) {
+   return this->write(s.c_str(), s.length(), timeout);
 }
 
 // ---
@@ -317,33 +317,54 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
   return true;
 }
 
-void TCPConnection::write(const char *bytes, size_t len) throw(Exception) {
+bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(Exception) {
   if (!isValid()) {
     throw Exception("TCPConnection", "Invalid connection.");
   }
   
   if (len == 0) {
-    return;
+    return true;
   }
   
   int offset = 0;
   int remaining = int(len);
   
+  gcore::TimeCounter st(gcore::TimeCounter::MilliSeconds);
+  
   while (remaining > 0) {
     
-    // flags ?
+    if (timeout > 0) {
+      if (st.elapsed().value() > timeout) {
+        return false;
+      }
+    }
+    
     int n = send(mFD, bytes+offset, remaining, 0);
     
     if (n == -1) {
       if (errno != 0) {
-        // Should notify socket ?
-        throw Exception("TCPConnection", "Could not write to socket.", true);
+        if (errno == EAGAIN) {
+          if (timeout == 0) {
+            return false;
+          
+          } else {
+            if (timeout < 0) {
+              // Blocking write -> Sleep 50ms before trying again
+              gcore::Thread::SleepCurrent(50);
+            }
+            continue;
+          }
+        
+        } else {
+          // Should notify socket ?
+          throw Exception("TCPConnection", "Could not write to socket.", true);
+        }
         
       } else {
         if (mSocket->fd() == mFD) {
           mSocket->invalidate();
         }
-        mFD = NULL_SOCKET;
+        this->invalidate();
         throw Exception("TCPConnection", "Connection was remotely closed.");
       }
     
@@ -357,6 +378,8 @@ void TCPConnection::write(const char *bytes, size_t len) throw(Exception) {
 #endif
     }
   }
+  
+  return true;
 }
   
 }
