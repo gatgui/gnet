@@ -84,6 +84,11 @@ namespace gnet {
       // =0: non-blocking
       // >0: non-blocking + timeout
       size_t select(double timeout=-1) throw(Exception);
+      // after a select, call 'next' in loop until NULL is return to iterate
+      // connections that are ready
+      // 'prevConn' must be NULL on first call
+      TCPConnection* next(TCPConnection *prevConn);
+      
       TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
       void close(TCPConnection*);
@@ -97,7 +102,9 @@ namespace gnet {
     protected:
       
       int mMaxConnections;
+      //int mMaxClients;
       std::vector<TCPConnection*> mConnections;
+      std::vector<TCPConnection*> mReadyConnections;
       fd_set mRead;
       fd_set mWrite;
   };

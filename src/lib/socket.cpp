@@ -26,6 +26,7 @@ USA.
 #include <exception>
 #include <sstream>
 #include <algorithm>
+#include <cmath>
 
 namespace gnet {
   
@@ -116,6 +117,13 @@ void TCPSocket::close(TCPConnection *conn) {
     
     if (it != mConnections.end()) {
       
+      mConnections.erase(it);
+      
+      it = std::find(mReadyConnections.begin(), mReadyConnections.end(), conn);
+      if (it != mReadyConnections.end()) {
+        mReadyConnections.erase(it);
+      }
+      
       // do not close connection that have same id
       if (conn->fd() != NULL_SOCKET && conn->fd() != fd()) {
 #ifdef _WIN32
@@ -123,16 +131,10 @@ void TCPSocket::close(TCPConnection *conn) {
 #else
         ::close(conn->fd());
 #endif
-        // should this be move to outer scope? is it actually really needed?
-        if (FD_ISSET(conn->fd(), &mRead)) {
-          FD_CLR(conn->fd(), &mRead);
-        }
       }
       
       // destroy it
       delete conn;
-      
-      mConnections.erase(it);
     }
   }
 }
@@ -146,7 +148,11 @@ TCPConnection* TCPSocket::connect() throw(Exception) {
   }
   
   mConnections.push_back(new TCPConnection(this, mFD, mHost));
-  return mConnections.back();
+  
+  TCPConnection *conn = mConnections.back();
+  conn->setBlocking(false);
+  
+  return conn;
 }
 
 TCPConnection* TCPSocket::accept() throw(Exception) {
@@ -162,7 +168,11 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   }
   
   mConnections.push_back(new TCPConnection(this, fd, h));
-  return mConnections.back();
+  
+  TCPConnection *conn = mConnections.back();
+  conn->setBlocking(false);
+  
+  return conn;
 }
 
 size_t TCPSocket::select(double timeout) throw(Exception) {
@@ -187,25 +197,77 @@ size_t TCPSocket::select(double timeout) throw(Exception) {
     tv = &_tv;
   }
   
+  int curfd, maxfd = (int) mFD;
+  
   FD_ZERO(&mRead);
   FD_SET(mFD, &mRead);
   
-  int rv = ::select(mFD+1, &mRead, NULL, NULL, tv);
+  for (size_t i=0; i<mConnections.size(); ++i) {
+    TCPConnection *conn = mConnections[i];
+    if (conn->isValid()) {
+      FD_SET(conn->fd(), &mRead);
+      curfd = (int) conn->fd();
+      if (curfd > maxfd) {
+        maxfd = curfd;
+      }
+    }
+  }
+  
+  mReadyConnections.clear();
+  
+  int rv = ::select(maxfd+1, &mRead, NULL, NULL, tv);
   
   if (rv == -1) {
     throw Exception("TCPSocket", "", true);
   
   } else if (rv > 0) {
-    // -> accept won't block!
-    //    if we have more than one connection?
+    if (FD_ISSET(mFD, &mRead)) {
+      // new connection, accept won't block
+      TCPConnection *conn = this->accept();
+      mReadyConnections.push_back(conn);
+    }
     
+    for (size_t i=0; i<mConnections.size(); ++i) {
+      TCPConnection *conn = mConnections[i];
+      if (conn->isValid() && FD_ISSET(conn->fd(), &mRead)) {
+        mReadyConnections.push_back(conn);
+      }
+    }
   }
   
-  return size_t(rv);
+  return mReadyConnections.size();
+}
+
+TCPConnection* TCPSocket::next(TCPConnection *prevConn) {
+  TCPConnection *nextConn = NULL;
+  std::vector<TCPConnection*>::iterator it;
   
-  // int
-  //    select(int nfds, fd_set *restrict readfds, fd_set *restrict writefds, fd_set *restrict errorfds,
-  //        struct timeval *restrict timeout);
+  if (!prevConn) {
+    if (mReadyConnections.size() == 0) {
+      return NULL;
+    
+    } else {
+      it = mReadyConnections.begin();
+    }
+  
+  } else {
+    it = std::find(mReadyConnections.begin(), mReadyConnections.end(), prevConn);
+    if (it == mReadyConnections.end()) {
+      return NULL;
+    } else {
+      ++it;
+    }
+  }
+  
+  while (it != mReadyConnections.end()) {
+    nextConn = *it;
+    if (nextConn->isValid()) {
+      return nextConn;
+    }
+    ++it;
+  }
+  
+  return NULL;
 }
 
 TCPSocket::TCPSocket() {
