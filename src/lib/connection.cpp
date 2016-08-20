@@ -69,7 +69,25 @@ void Connection::setBufferSize(unsigned long n) {
   mBufferSize = n;
 }
 
-bool Connection::sread(std::string &s, const char *until, double timeout) throw(Exception) {
+bool Connection::setBlocking(bool blocking) {
+  if (!isValid()) {
+    return false;
+  }
+#ifdef _WIN32
+  return (::ioctlsocket(mFD, FIONBIO, (blocking ? 0 : 1)) == 0);
+#else
+  int flags = ::fcntl(mFD, F_GETFL, NULL);
+  if (blocking) {
+    flags = flags & ~O_NONBLOCK;
+  } else {
+    flags = flags | O_NONBLOCK;
+  }
+  return (::fcntl(mFD, F_SETFL, flags) != -1);
+#endif
+}
+
+
+bool Connection::sread(std::string &s, double timeout) throw(Exception) {
   char *bytes = 0;
   size_t len = 0;
   bool rv = this->read(bytes, len, timeout);
@@ -184,8 +202,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     n = recv(mFD, mBuffer+mBufferOffset, mBufferSize-mBufferOffset, 0);
     
     if (n == -1) {
-      // Should notify socket ?
-      // EWOULDBLOCK?
+      // EWOULDBLOCK == EAGAIN
       if (timeout > 0 && errno == EAGAIN) {
         continue;
       }

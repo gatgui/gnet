@@ -52,8 +52,8 @@ namespace gnet {
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
       // calling them from TCPConnection instance resulted in compilation error on linux...
-      bool sread(std::string &s, int timeout=-1) throw(Exception);
-      bool sreadUntil(const char *until, std::string &s, int timeout=-1) throw(Exception);
+      bool sread(std::string &s, double timeout=-1) throw(Exception);
+      bool sreadUntil(const char *until, std::string &s, double timeout=-1) throw(Exception);
       void swrite(const std::string &s) throw(Exception);
       
       inline unsigned long getBufferSize() const {
@@ -65,6 +65,8 @@ namespace gnet {
       }
       
       void setBufferSize(unsigned long n);
+      
+      bool setBlocking(bool blocking);
     
     private:
       

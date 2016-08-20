@@ -48,6 +48,7 @@ USA.
 #include <iostream>
 #include <exception>
 #include <stdexcept>
+#include <fcntl.h>
 
 #ifdef _WIN32
 # define WIN32_LEAN_AND_MEAN
