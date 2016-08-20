@@ -48,6 +48,7 @@ namespace gnet {
       virtual void write(const char* bytes, size_t len) throw(Exception) = 0;
       
       bool isValid() const;
+      void invalidate();
       // bool isAlive() const;
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'

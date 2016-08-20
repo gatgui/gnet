@@ -23,6 +23,7 @@ USA.
 
 #include <gnet/connection.h>
 #include <gnet/socket.h>
+#include <gcore/threads.h>
 #include <gcore/time.h>
 #include <exception>
 #include <cstring>
@@ -55,7 +56,11 @@ Connection::~Connection() {
 bool Connection::isValid() const {
   return (mFD != NULL_SOCKET);
 }
-  
+
+void Connection::invalidate() {
+  mFD = NULL_SOCKET;
+}
+
 void Connection::setBufferSize(unsigned long n) {
   if (n > mBufferSize) {
     if (mBuffer) {
@@ -155,8 +160,9 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
   std::cout << "gnet::TCPConnection::read: until \"" << (until ? until : "") << "\"" << std::endl;
 #endif
   
-  // Check for until string if set
+  // If set, check for until string in remaining bytes of last read
   if (until != NULL && mBufferOffset > 0) {
+    // Note: mBuffer[mBufferOffset] == '\0'
     size_t ulen = strlen(until);
     char *found = strstr(mBuffer, until);
     if (found != NULL) {
@@ -181,40 +187,51 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     }
   }
   
-  //time_t st, et;
-  
-  //st = time(NULL);
   gcore::TimeCounter st(gcore::TimeCounter::MilliSeconds);
   
   do {
     
     if (timeout > 0) {
-      //et = time(NULL);
-      //if ((et - st) >= time_t(timeout)) {
       if (st.elapsed().value() > timeout) {
-        // return current state
         return false;
       }
     }
     
-    // flags? will this be blocking? then what about our timeout?
-    // => might need to set options on the socket itself for non-blocking read
+    // If socket is not set to be non-blocking, we'll be stuck here until
+    // data comes in, defeating the purpose of 'timeout'
+    // Be sure to call 'setBlocking(false)' before make use of the method with timeout
+    // The TCPSocket class will do it on all the TCPConnection intances it creates
     n = recv(mFD, mBuffer+mBufferOffset, mBufferSize-mBufferOffset, 0);
     
     if (n == -1) {
-      // EWOULDBLOCK == EAGAIN
-      if (timeout > 0 && errno == EAGAIN) {
-        continue;
-      }
-      // if 0 -> non-blocking
-      // return false and set 0 in bytes?
+      // There's no guaranty that EWOULDBLOCK == EAGAIN
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (timeout == 0) {
+          if (bytes) {
+            free(bytes);
+            bytes = 0;
+            len = 0;
+          }
+          return false;
+        
+        } else {
+          if (timeout < 0) {
+            // Blocking read -> Sleep 50ms before trying again
+            gcore::Thread::SleepCurrent(50);
+          }
+          continue;
+        }
       
-      if (bytes) {
-         free(bytes);
-         bytes = 0;
-         len = 0;
+      } else {
+        // Any other error -> raise an exception
+        if (bytes) {
+           free(bytes);
+           bytes = 0;
+           len = 0;
+        }
+        
+        throw Exception("TCPConnection", "Could not read from socket.", true);
       }
-      throw Exception("TCPConnection", "Could not read from socket.", true);
     }
     
     if (n == 0) {
@@ -222,12 +239,17 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
       if (mSocket->fd() == mFD) {
         mSocket->invalidate();
       }
-      mFD = NULL_SOCKET;
+      
+      this->invalidate();
+      
       if (bytes) {
          free(bytes);
          bytes = 0;
          len = 0;
       }
+      
+      // Raise an exception in order to differentiate from 'Nothing read'
+      // which is possible with non-blocking (timeout or not) reads
       throw Exception("TCPConnection", "Connection was remotely closed.");
     }
     
@@ -272,7 +294,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
         size_t rmnlen = n - sublen;
         found[ulen] = '\0';
         len -= rmnlen;
-        // keep remaining bits in buffer
+        // keep remaining bytes in buffer
         mBufferOffset = (unsigned long)rmnlen;
         for (size_t i=0; i<rmnlen; ++i) {
           mBuffer[i] = mBuffer[sublen+i];
