@@ -49,6 +49,7 @@ namespace gnet {
       
       virtual bool isValid() const;
       virtual void invalidate();
+      // isAlive default behaviour is identical to isValid
       virtual bool isAlive() const;
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
@@ -94,6 +95,8 @@ namespace gnet {
       
       virtual bool isValid() const;
       virtual void invalidate();
+      // isAlive will try to peek read on connection socket
+      // If connection is blocking, so will isAlive
       virtual bool isAlive() const;
       
       // Need to add those the std::string overrides of read, readUntil and write are 

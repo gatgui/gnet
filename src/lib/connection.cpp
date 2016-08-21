@@ -31,6 +31,36 @@ USA.
 #include <ctime>
 #include <cerrno>
 
+#ifndef _WIN32
+# include <signal.h>
+class BlockSignal {
+public:
+  BlockSignal(int sig, bool noop=false)
+    : mRestoreMask(!noop) {
+    if (!noop) {
+      sigset_t mask;
+      sigemptyset(&mask);
+      sigaddset(&mask, sig);
+      sigprocmask(SIG_BLOCK, &mask, &mOldMask);
+    }
+  }
+  ~BlockSignal() {
+    if (mRestoreMask) {
+      sigprocmask(SIG_BLOCK, &mOldMask, NULL);
+    }
+  }
+private:
+  bool mRestoreMask;
+  sigset_t mOldMask;
+};
+#else
+class BlockSignal {
+public:
+  BlockSignal(int sig, bool noop=false) {}
+  ~BlockSignal() {}
+};
+#endif
+
 namespace gnet {
   
 
@@ -365,35 +395,67 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
       }
     }
     
+    // If connection is remotly closed, 'send' will result in a SIGPIPE signal on unix systems
+    
+    /*
     if (!isAlive()) {
       this->invalidate();
       throw Exception("TCPConnection", "Connection was remotely closed.");
     }
-    // If connection is remotly closed, 'send' will result in a SIGPIPE signal
     int n = send(mFD, bytes+offset, remaining, 0);
+    */
     
+    int n = -1;
+    int flags = 0;
+    {
+#ifdef MSG_NOSIGNAL
+      flags = MSG_NOSIGNAL;
+#else // MSG_NOSIGNAL
+# ifdef SIGPIPE
+      bool noop = false;
+#  ifdef SO_NOSIGPIPE
+      int nosigpipe = 0;
+      socklen_t optlen = sizeof(int);
+      if (!getsockopt(mFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, &optlen)) {
+        noop = (nosigpipe != 0);
+      }
+#  endif // SO_SIGPIPE
+      BlockSignal(SIGPIPE, noop);
+# else // SIGPIPE
+      // No workaround SIGPIPE signal
+# endif // SIGPIPE
+#endif // MSG_NOSIGNAL
+      n = send(mFD, bytes+offset, remaining, flags);
+    }
+
     if (n == -1) {
-      if (errno != 0) {
-        if (errno == EAGAIN) {
-          if (timeout == 0) {
-            return false;
-          
-          } else {
-            if (timeout < 0) {
-              // Blocking write -> Sleep 50ms before trying again
-              gcore::Thread::SleepCurrent(50);
-            }
-            continue;
-          }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (timeout == 0) {
+          return false;
         
         } else {
-          // Should notify socket ?
+          if (timeout < 0) {
+            // Blocking write -> Sleep 50ms before trying again
+            gcore::Thread::SleepCurrent(50);
+          }
+          continue;
+        }
+      
+      } else {
+        // Should notify socket ?
+#ifdef _WIN32
+        int err = WSAGetLastError();
+        if (err == WSAECONNRESET || err == WSAECONNABORTED) {
+#else
+        if (errno == 0 || errno == EPIPE) {
+#endif
+          this->invalidate();
+          throw Exception("TCPConnection", "Connection was remotely closed.");
+        
+        } else {
+          // Socket should still usable, should just return false to differentiate?
           throw Exception("TCPConnection", "Could not write to socket.", true);
         }
-        
-      } else {
-        this->invalidate();
-        throw Exception("TCPConnection", "Connection was remotely closed.");
       }
     
     } else {
