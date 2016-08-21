@@ -19,17 +19,24 @@ int main(int, char**) {
       
       std::cout << "Accept new connection...";
       gnet::TCPConnection *conn = socket.accept();
+      if (!conn) {
+        std::cout << "FAILED" << std::endl;
+        continue;
+      }
       std::cout << "DONE" << std::endl;
       
       std::cout << "Read data from connection...";
-      conn->read(buffer, len);
-      std::cout << "DONE: \"" << buffer << "\"" << std::endl;
-      
-      if (!strcmp(buffer, "QUIT")) {
-        end = true;
+      bool rv = conn->read(buffer, len, -1);
+      std::cout << "DONE: (" << rv << ")" << std::endl;
+      if (buffer) {
+        std::cout << "\"" << buffer << "\"" << std::endl;
+        if (strstr(buffer, "QUIT") != NULL) {
+          end = true;
+        }
+        free(buffer);
+      } else {
+        std::cout << "<null>" << std::endl;
       }
-      
-      free(buffer);
       
       std::cout << "Close connection...";
       socket.close(conn);
