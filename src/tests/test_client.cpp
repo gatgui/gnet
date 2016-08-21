@@ -22,28 +22,18 @@ int main(int argc, char **argv) {
 
   gnet::Initialize();
 
+  std::cout << "Get Host...";
+  gnet::Host host(server, port);
+  std::cout << "DONE: " << host.address() << ":" << host.port() << std::endl;
+  
+  gnet::TCPSocket socket(host);
+  
+  std::cout << "Connect to server...";
+  gnet::TCPConnection *conn = socket.connect();
+  std::cout << "DONE" << std::endl;
+
   try {
-    /*
-    std::cout << "Create socket" << std::endl;
-    Nett::Socket socket(server, 8080);
-    
-    std::cout << "Connect to socket" << std::endl;
-    gnet::Connection conn = socket.connect();
-    
-    std::cout << "Send data to socket" << std::endl;
-    conn.write(content.c_str(), content.length());
-    */
     bool end = false;
-    
-    std::cout << "Get Host...";
-    gnet::Host host(server, port);
-    std::cout << "DONE: " << host.address() << ":" << host.port() << std::endl;
-    
-    gnet::TCPSocket socket(host);
-    
-    std::cout << "Connect to server...";
-    gnet::TCPConnection *conn = socket.connect();
-    std::cout << "DONE" << std::endl;
     
     while (!end) {
       
@@ -61,27 +51,29 @@ int main(int argc, char **argv) {
       
       if (!strcmp(buffer, "QUIT")) {
         end = true;
-        continue;
       }
       
       std::cout << "Send data: \"" << buffer << "\"...";
-      conn->write(buffer, len-1);
-      std::cout << "DONE" << std::endl;
+      bool rv = conn->write(buffer, len-1);
+      std::cout << "DONE (" << rv << ")" << std::endl;
       
       // to check if connection is alive
       // do a non-blocking read, and check for 0 result
       // read(fd, buffer, len, MSG_NONBLOCK) == 0
-  
     }
-      
-    std::cout << "Close connection...";
-    socket.close(conn);
-    std::cout << "DONE" << std::endl;
     
   } catch (std::exception &e) {
     
     std::cout << e.what() << std::endl;
   }
+  
+  char buffer[8];
+  std::cout << "Press any Key to Terminate" << std::endl;
+  fgets(buffer, 8, stdin);
+  
+  std::cout << "Close connection...";
+  socket.close(conn);
+  std::cout << "DONE" << std::endl;
   
   gnet::Uninitialize();
   
