@@ -248,6 +248,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
             // Blocking read -> Sleep 50ms before trying again
             gcore::Thread::SleepCurrent(50);
           }
+          full = true;
           continue;
         }
       
