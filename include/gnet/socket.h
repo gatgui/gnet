@@ -63,7 +63,6 @@ namespace gnet {
       
       sock_t mFD;
       Host mHost;
-      
   };
   
   class GNET_API TCPSocket : public Socket {
@@ -93,6 +92,7 @@ namespace gnet {
       TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
       void close(TCPConnection*);
+      void closeAll();
     
     protected:
       

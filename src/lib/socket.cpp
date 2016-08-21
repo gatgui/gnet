@@ -80,22 +80,7 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 }
 
 TCPSocket::~TCPSocket() {
-  
-  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
-    TCPConnection *conn = *it;
-    if (conn->isValid() && conn->fd() != mFD) {
-#ifdef _WIN32
-      closesocket(mFD);
-#else
-      ::close(mFD);
-#endif
-    }
-    delete conn;
-  }
-  
-  mConnections.clear();
-  mReadConnections.clear();
-  mWriteConnections.clear();
+  closeAll();
   
   if (isValid()) {
 #ifdef _WIN32
@@ -122,6 +107,24 @@ void TCPSocket::listen(int maxConnections) throw(Exception) {
 void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
   this->bind();
   this->listen(maxConnections);
+}
+
+void TCPSocket::closeAll() {
+  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    TCPConnection *conn = *it;
+    if (conn->isValid() && conn->fd() != mFD) {
+#ifdef _WIN32
+      closesocket(mFD);
+#else
+      ::close(mFD);
+#endif
+    }
+    delete conn;
+  }
+  
+  mConnections.clear();
+  mReadConnections.clear();
+  mWriteConnections.clear();
 }
 
 void TCPSocket::close(TCPConnection *conn) {
@@ -235,14 +238,14 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
   
   if (readable) {
     FD_ZERO(readfds);
-    // for new connections
     FD_SET(mFD, readfds);
     maxfd = mFD;
   }
   
   if (writable) {
     FD_ZERO(writefds);
-    // FD_SET(mFD, &writefds);
+    FD_SET(mFD, writefds);
+    maxfd = mFD;
   }
   
   for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
@@ -282,10 +285,11 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
     }
   }
   
-  // if (writable) {
-  //   if (FD_ISSET(mFD, &writefds)) {
-  //   }
-  // }
+  if (writable) {
+    if (FD_ISSET(mFD, writefds)) {
+      // Nothing special to do here?
+    }
+  }
   
   for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
     TCPConnection *conn = *it;
