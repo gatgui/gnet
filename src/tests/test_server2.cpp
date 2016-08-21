@@ -22,14 +22,21 @@ int main(int, char**) {
         
         while ((conn = socket.nextReadable()) != NULL) {
           std::cout << "Read data from connection (blocking)...";
-          if (conn->read(data)) {
-            std::cout << "DONE: \"" << data << "\"" << std::endl;
-            if (data == "QUIT") {
-              end = true;
-              break;
+          
+          try {
+            if (conn->read(data)) {
+              std::cout << "DONE: \"" << data << "\"" << std::endl;
+              if (data.find("QUIT") != std::string::npos) {
+                end = true;
+                break;
+              }
             }
+          } catch (gnet::Exception &e) {
+            std::cerr << "Connection error: " << e.what() << std::endl;
+            socket.close(conn);
           }
         }
+        
         waiting = false;
       
       } else {
