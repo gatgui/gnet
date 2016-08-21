@@ -61,6 +61,7 @@ prjs = [
   { "name"    : "gnet_tests",
     "type"    : "testprograms",
     "srcs"    : glob.glob("src/tests/*.cpp"),
+    "deps"    : ["gnet"],
     "custom"  : [RequireGnet]
   }
 ]
