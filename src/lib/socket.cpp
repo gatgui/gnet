@@ -80,7 +80,7 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 }
 
 TCPSocket::~TCPSocket() {
-  closeAll();
+  // closeAll();
   
   if (isValid()) {
 #ifdef _WIN32
@@ -169,6 +169,20 @@ void TCPSocket::close(TCPConnection *conn) {
   }
 }
 
+void TCPSocket::setup(TCPConnection *conn) {
+  
+  // may want to expose the setup values
+  
+  conn->setBlocking(false);
+  
+  // linger?
+  
+#ifdef SO_NOSIGPIPE
+  int nosigpipe = 1;
+  setsockopt(mFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(int));
+#endif
+}
+
 TCPConnection* TCPSocket::connect() throw(Exception) {
   
   socklen_t len = sizeof(struct sockaddr);
@@ -180,7 +194,7 @@ TCPConnection* TCPSocket::connect() throw(Exception) {
   mConnections.push_back(new TCPConnection(this, mFD, mHost));
   
   TCPConnection *conn = mConnections.back();
-  conn->setBlocking(false);
+  setup(conn);
   
   return conn;
 }
@@ -200,9 +214,84 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   mConnections.push_back(new TCPConnection(this, fd, h));
   
   TCPConnection *conn = mConnections.back();
-  conn->setBlocking(false);
+  setup(conn);
   
   return conn;
+}
+
+bool TCPSocket::toTimeVal(double ms, struct timeval &tv) const {
+  if (ms < 0) {
+    return false;
+  }
+  
+  if (ms > 0) {
+    double total = gcore::TimeCounter::ConvertUnits(ms, gcore::TimeCounter::MilliSeconds, gcore::TimeCounter::Seconds);
+    double secs = floor(total);
+    double remain = total - secs;
+    double usecs = floor(0.5 + gcore::TimeCounter::ConvertUnits(remain, gcore::TimeCounter::Seconds, gcore::TimeCounter::MicroSeconds));
+    
+    tv.tv_sec = (long) secs;
+    tv.tv_usec = (long) usecs;
+    
+  } else {
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    
+  }
+  
+  return false;
+}
+
+int TCPSocket::peek(bool readable, bool writable, double timeout) const {
+  struct timeval _tv;
+  struct timeval *tv = 0;
+  int curfd, maxfd = -1;
+  fd_set _readfds;
+  fd_set _writefds;
+  fd_set *readfds = (readable ? &_readfds : NULL);
+  fd_set *writefds = (writable ? &_writefds : NULL);
+  
+  if (!readable && !writable) {
+    return 0;
+  }
+  
+  if (toTimeVal(timeout, _tv)) {
+    tv = &_tv;
+  }
+  
+  if (readable) {
+    FD_ZERO(readfds);
+    FD_SET(mFD, readfds);
+    maxfd = mFD;
+  }
+  
+  if (writable) {
+    FD_ZERO(writefds);
+    FD_SET(mFD, writefds);
+    maxfd = mFD;
+  }
+  
+  for (ConnectionList::const_iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    TCPConnection *conn = *it;
+    
+    if (conn->isValid()) {
+      if (readable) {
+        FD_SET(conn->fd(), readfds);
+      }
+      
+      if (writable) {
+        FD_SET(conn->fd(), writefds);
+      }
+      
+      curfd = (int) conn->fd();
+      
+      if (curfd > maxfd) {
+        maxfd = curfd;
+      }
+    }
+  }
+  
+  return ::select(maxfd+1, readfds, writefds, NULL, tv);
 }
 
 size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exception) {
@@ -218,21 +307,7 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
     return 0;
   }
   
-  if (timeout >= 0) {
-    if (timeout > 0) {
-      double total = gcore::TimeCounter::ConvertUnits(timeout, gcore::TimeCounter::MilliSeconds, gcore::TimeCounter::Seconds);
-      double secs = floor(total);
-      double remain = total - secs;
-      double usecs = floor(0.5 + gcore::TimeCounter::ConvertUnits(remain, gcore::TimeCounter::Seconds, gcore::TimeCounter::MicroSeconds));
-      
-      _tv.tv_sec = (long) secs;
-      _tv.tv_usec = (long) usecs;
-      
-    } else {
-      _tv.tv_sec = 0;
-      _tv.tv_usec = 0;
-    }
-    
+  if (toTimeVal(timeout, _tv)) {
     tv = &_tv;
   }
   

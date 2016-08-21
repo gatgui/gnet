@@ -89,6 +89,13 @@ namespace gnet {
       TCPConnection* nextReadable();
       TCPConnection* nextWritable();
       
+      // peek is like select but doesn't change TCPSocket internal state
+      // return value is the same as stdlib 'select' function
+      // -1: error, otherwise number if sockets ready to operate
+      inline int peek(double timeout=-1) const { return this->peek(true, true, timeout); }
+      inline int peekReadable(double timeout=-1) const { return this->peek(true, false, timeout); }
+      inline int peekWritable(double timeout=-1) const { return this->peek(false, true, timeout); }
+      
       TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
       void close(TCPConnection*);
@@ -100,7 +107,10 @@ namespace gnet {
       TCPSocket(const TCPSocket&);
       TCPSocket& operator=(const TCPSocket&);
       
+      void setup(TCPConnection *conn);
+      bool toTimeVal(double ms, struct timeval &tv) const;
       size_t select(bool readable, bool writable, double timeout) throw(Exception);
+      int peek(bool readable, bool writable, double timeout) const;
       
     protected:
       
