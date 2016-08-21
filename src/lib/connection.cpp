@@ -92,7 +92,7 @@ bool Connection::setBlocking(bool blocking) {
 }
 
 
-bool Connection::sread(std::string &s, double timeout) throw(Exception) {
+bool Connection::read(std::string &s, double timeout) throw(Exception) {
   char *bytes = 0;
   size_t len = 0;
   bool rv = this->read(bytes, len, timeout);
@@ -105,7 +105,7 @@ bool Connection::sread(std::string &s, double timeout) throw(Exception) {
   return rv;
 }
 
-bool Connection::sreadUntil(const char *until, std::string &s, double timeout) throw(Exception) {
+bool Connection::readUntil(const char *until, std::string &s, double timeout) throw(Exception) {
   char *bytes = 0;
   size_t len = 0;
   bool rv = this->readUntil(until, bytes, len, timeout);
@@ -118,7 +118,7 @@ bool Connection::sreadUntil(const char *until, std::string &s, double timeout) t
   return rv;
 }
 
-bool Connection::swrite(const std::string &s, double timeout) throw(Exception) {
+bool Connection::write(const std::string &s, double timeout) throw(Exception) {
    return this->write(s.c_str(), s.length(), timeout);
 }
 
@@ -339,6 +339,7 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
       }
     }
     
+    // If connection is remotly closed, this can lead to signal SIGPIPE
     int n = send(mFD, bytes+offset, remaining, 0);
     
     if (n == -1) {

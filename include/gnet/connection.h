@@ -53,9 +53,9 @@ namespace gnet {
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
       // calling them from TCPConnection instance resulted in compilation error on linux...
-      bool sread(std::string &s, double timeout=-1) throw(Exception);
-      bool sreadUntil(const char *until, std::string &s, double timeout=-1) throw(Exception);
-      bool swrite(const std::string &s, double timeout=-1) throw(Exception);
+      bool read(std::string &s, double timeout=-1) throw(Exception);
+      bool readUntil(const char *until, std::string &s, double timeout=-1) throw(Exception);
+      bool write(const std::string &s, double timeout=-1) throw(Exception);
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;
@@ -91,6 +91,13 @@ namespace gnet {
       friend class TCPSocket;
       
       virtual ~TCPConnection();
+      
+      // Need to add those the std::string overrides of read, readUntil and write are 
+      // available to TCPConnection class
+      // (overrides only work in one scope at a time)
+      using Connection::read;
+      using Connection::readUntil;
+      using Connection::write;
       
       virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception);
       virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception);
