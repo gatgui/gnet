@@ -47,9 +47,9 @@ namespace gnet {
       virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
       virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception) = 0;
       
-      bool isValid() const;
-      void invalidate();
-      // bool isAlive() const;
+      virtual bool isValid() const;
+      virtual void invalidate();
+      virtual bool isAlive() const;
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
       // calling them from TCPConnection instance resulted in compilation error on linux...
@@ -91,6 +91,10 @@ namespace gnet {
       friend class TCPSocket;
       
       virtual ~TCPConnection();
+      
+      virtual bool isValid() const;
+      virtual void invalidate();
+      virtual bool isAlive() const;
       
       // Need to add those the std::string overrides of read, readUntil and write are 
       // available to TCPConnection class

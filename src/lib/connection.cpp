@@ -61,6 +61,10 @@ void Connection::invalidate() {
   mFD = NULL_SOCKET;
 }
 
+bool Connection::isAlive() const {
+  return (mFD != NULL_SOCKET);
+}
+
 void Connection::setBufferSize(unsigned long n) {
   if (n > mBufferSize) {
     if (mBuffer) {
@@ -133,6 +137,31 @@ TCPConnection::TCPConnection(TCPSocket *socket, sock_t fd, const Host &host)
 }
 
 TCPConnection::~TCPConnection() {
+}
+
+bool TCPConnection::isValid() const {
+  return (Connection::isValid() && mSocket != NULL && mSocket->isValid());
+}
+
+void TCPConnection::invalidate() {
+  if (mSocket && mSocket->fd() == mFD) {
+    mSocket->invalidate();
+  }
+  Connection::invalidate();
+}
+
+bool TCPConnection::isAlive() const {
+  if (isValid()) {
+    char rdbuf[8];
+    
+    // Try to read something from mFD, 0 is returned if connection is closed.
+    // This assumes that the connection is not blocking.
+    // Use MSG_PEEK to avoid pulling data we're not supposed to
+    return (recv(mFD, rdbuf, 8, MSG_PEEK) != 0);
+  
+  } else {
+    return false;
+  }
 }
 
 bool TCPConnection::read(char *&bytes, size_t &len, double timeout) throw(Exception) {
@@ -236,10 +265,6 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     
     if (n == 0) {
       // Connection closed
-      if (mSocket->fd() == mFD) {
-        mSocket->invalidate();
-      }
-      
       this->invalidate();
       
       if (bytes) {
@@ -339,7 +364,11 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
       }
     }
     
-    // If connection is remotly closed, this can lead to signal SIGPIPE
+    if (!isAlive()) {
+      this->invalidate();
+      throw Exception("TCPConnection", "Connection was remotely closed.");
+    }
+    // If connection is remotly closed, 'send' will result in a SIGPIPE signal
     int n = send(mFD, bytes+offset, remaining, 0);
     
     if (n == -1) {
@@ -362,9 +391,6 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
         }
         
       } else {
-        if (mSocket->fd() == mFD) {
-          mSocket->invalidate();
-        }
         this->invalidate();
         throw Exception("TCPConnection", "Connection was remotely closed.");
       }
