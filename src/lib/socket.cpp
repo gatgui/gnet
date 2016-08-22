@@ -135,6 +135,10 @@ void TCPSocket::closeAll() {
   mConnections.clear();
   mReadConnections.clear();
   mWriteConnections.clear();
+  
+#ifdef _WIN32
+  clearEvents();
+#endif
 }
 
 void TCPSocket::close(TCPConnection *conn) {
@@ -232,7 +236,7 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   sock_t fd = ::accept(mFD, h, &len);
   
   if (fd == NULL_SOCKET) {
-    throw Exception("TCPSocket", "Could not accept connetion.", true);
+    throw Exception("TCPSocket", "Could not accept connection.", true);
   }
   
   mConnections.push_back(new TCPConnection(this, fd, h));
@@ -266,10 +270,17 @@ bool TCPSocket::toTimeval(double ms, struct timeval &tv) const {
   return true;
 }
 
-int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfds, fd_set *writefds) const {
-  struct timeval _tv;
-  struct timeval *tv = 0;
-  int curfd, maxfd = -1;
+#ifdef _WIN32
+void TCPSocket::clearEvents() {
+  for (size_t i=0; i<mEvents.size(); ++i) {
+    WSACloseEvent(mEvents[i]);
+  }
+  mEvents.clear();
+  mEventConns.clear();
+}
+#endif
+
+int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfds, fd_set *writefds) {
   fd_set _readfds;
   fd_set _writefds;
   
@@ -285,10 +296,105 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
     writefds = &_writefds;
   }
   
+#ifdef _WIN32
+  
+  // select() on windows would just not work
+  // => WSAENOBUFS error right away
+  
+  if (readable) {
+    FD_ZERO(readfds);
+  }
+  
+  if (writable) {
+    FD_ZERO(writefds);
+  }
+  
+  ConnectionList::const_iterator eit = mConnections.end();
+  
+  clearEvents();
+  
+  mEvents.reserve(1 + mConnections.size());
+  mEventConns.reserve(1 + mConnections.size());
+  
+  if (readable) {
+    mEventConns.push_back(eit);
+    mEvents.push_back(WSACreateEvent());
+    WSAEventSelect(mFD, mEvents.back(), FD_ACCEPT|FD_CLOSE); // FD_CONNECT
+  }
+  
+  for (ConnectionList::const_iterator it=mConnections.begin(); it!=eit; ++it) {
+    TCPConnection *conn = *it;
+    if (conn->isValid()) {
+      long flags = FD_CLOSE;
+      if (readable) {
+        flags = flags | FD_READ;
+      }
+      if (writable) {
+        flags = flags | FD_WRITE;
+      }
+      mEventConns.push_back(it);
+      mEvents.push_back(WSACreateEvent());
+      WSAEventSelect(conn->fd(), mEvents.back(), flags);
+    }
+  }
+  
+  DWORD sz = (DWORD) mEvents.size();
+  if (sz == 0) {
+    return 0;
+  }
+  
+  DWORD to = (timeout < 0 ? WSA_INFINITE : (DWORD) floor(timeout + 0.5));
+  DWORD rv = WSAWaitForMultipleEvents(sz, &mEvents[0], FALSE, to, FALSE);
+  int ret = 0;
+  
+  if (rv == WSA_WAIT_FAILED) {
+    ret = -1;
+  
+  } else if (timeout >= 0 && rv == WSA_WAIT_TIMEOUT) {
+    ret = 0;
+  
+  } else if (rv >= WSA_WAIT_EVENT_0 && rv < (WSA_WAIT_EVENT_0 + sz)) {
+    size_t fidx = rv - WSA_WAIT_EVENT_0;
+    ConnectionList::const_iterator cit;
+    WSANETWORKEVENTS nevts;
+    
+    for (size_t eidx=fidx; eidx<mEvents.size(); ++eidx) {
+      rv = WSAWaitForMultipleEvents(1, &mEvents[eidx], TRUE, 0, FALSE);
+      if (rv != WSA_WAIT_FAILED) {
+        cit = mEventConns[eidx];
+        sock_t fd = (cit == eit ? mFD : (*cit)->fd());
+        WSAEnumNetworkEvents(fd, mEvents[eidx], &nevts);
+        if (readable && (nevts.lNetworkEvents & (FD_READ|FD_ACCEPT|FD_CLOSE)) != 0) {
+          FD_SET(fd, readfds);
+          ++ret;
+        }
+        if (writable && (nevts.lNetworkEvents & FD_WRITE) != 0) {
+          FD_SET(fd, writefds);
+          ++ret;
+        }
+      }
+    }
+  
+  } else {
+    // unhandled error
+    ret = -1;
+  }
+  
+  // for (size_t i=0; i<mEvents.size(); ++i) {
+  //   WSACloseEvent(mEvents[i]);
+  // }
+  
+  return ret;
+  
+#else
+  
+  struct timeval _tv;
+  struct timeval *tv = 0;
   if (toTimeval(timeout, _tv)) {
     tv = &_tv;
   }
   
+  int curfd, maxfd = -1;
   if (readable) {
     FD_ZERO(readfds);
     FD_SET(mFD, readfds);
@@ -322,6 +428,8 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
   }
   
   return ::select(maxfd+1, readfds, writefds, NULL, tv);
+  
+#endif
 }
 
 size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exception) {

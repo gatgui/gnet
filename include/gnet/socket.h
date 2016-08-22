@@ -26,6 +26,7 @@ USA.
 
 #include <gnet/config.h>
 #include <gnet/connection.h>
+#include <vector>
 #include <list>
 
 namespace gnet {
@@ -92,9 +93,9 @@ namespace gnet {
       // peek is like select but doesn't change TCPSocket internal state
       // return value is the same as stdlib 'select' function
       // -1: error, otherwise number if sockets ready to operate
-      inline int peek(double timeout=-1) const { return this->peek(true, true, timeout); }
-      inline int peekReadable(double timeout=-1) const { return this->peek(true, false, timeout); }
-      inline int peekWritable(double timeout=-1) const { return this->peek(false, true, timeout); }
+      inline int peek(double timeout=-1) { return this->peek(true, true, timeout); }
+      inline int peekReadable(double timeout=-1) { return this->peek(true, false, timeout); }
+      inline int peekWritable(double timeout=-1) { return this->peek(false, true, timeout); }
       
       TCPConnection* accept() throw(Exception);
       TCPConnection* connect() throw(Exception);
@@ -113,7 +114,7 @@ namespace gnet {
       void setup(TCPConnection *conn);
       bool toTimeval(double ms, struct timeval &tv) const;
       size_t select(bool readable, bool writable, double timeout) throw(Exception);
-      int peek(bool readable, bool writable, double timeout, fd_set *readfds=0, fd_set *writefds=0) const;
+      int peek(bool readable, bool writable, double timeout, fd_set *readfds=0, fd_set *writefds=0);
       
     protected:
       
@@ -128,6 +129,12 @@ namespace gnet {
       ConnectionList::iterator mCurWriteConnection;
       bool mDefaultBlocking;
       bool mDefaultLinger;
+      
+#ifdef _WIN32
+      std::vector<WSAEVENT> mEvents;
+      std::vector<ConnectionList::const_iterator> mEventConns;
+      void clearEvents();
+#endif
   };
   
 }
