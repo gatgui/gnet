@@ -277,13 +277,13 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
   if (readable) {
     FD_ZERO(readfds);
     FD_SET(mFD, readfds);
-    maxfd = mFD;
+    maxfd = int(mFD);
   }
   
   if (writable) {
     FD_ZERO(writefds);
     FD_SET(mFD, writefds);
-    maxfd = mFD;
+    maxfd = int(mFD);
   }
   
   for (ConnectionList::const_iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {

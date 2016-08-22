@@ -59,6 +59,15 @@ USA.
 typedef SOCKET sock_t;
 typedef int socklen_t;
 #define NULL_SOCKET INVALID_SOCKET
+#ifndef SHUT_RD
+# define SHUT_RD SD_RECEIVE
+#endif
+#ifndef SHUT_WR
+# define SHUT_WR SD_SEND
+#endif
+#ifndef SHUT_RDWR
+# define SHUT_RDWR SD_BOTH
+#endif
 //typedef int socklen_t;
 //# define socket_close          closesocket
 //# define socket_read(s, b, l)  recv(s, b, l, 0)

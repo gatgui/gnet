@@ -56,7 +56,7 @@ private:
 #else
 class BlockSignal {
 public:
-  BlockSignal(int sig, bool noop=false) {}
+  BlockSignal(int, bool=false) {}
   ~BlockSignal() {}
 };
 #endif
@@ -113,7 +113,8 @@ bool Connection::setBlocking(bool blocking) {
     return false;
   }
 #ifdef _WIN32
-  return (::ioctlsocket(mFD, FIONBIO, (blocking ? 0 : 1)) == 0);
+  u_long arg = (blocking ? 0 : 1);
+  return (::ioctlsocket(mFD, FIONBIO, &arg) == 0);
 #else
   int flags = ::fcntl(mFD, F_GETFL, NULL);
   if (blocking) {
@@ -283,7 +284,12 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     
     if (n == -1) {
       // There's no guaranty that EWOULDBLOCK == EAGAIN
+#ifdef _WIN32
+      int err = WSAGetLastError();
+      if (err == WSAEWOULDBLOCK) {
+#else
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
         if (timeout == 0) {
           if (bytes) {
             free(bytes);
@@ -450,7 +456,12 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
     }
 
     if (n == -1) {
+#ifdef _WIN32
+      int err = WSAGetLastError();
+      if (err == WSAEWOULDBLOCK) {
+#else
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
         if (timeout == 0) {
           return false;
         
@@ -465,7 +476,6 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
       } else {
         // Should notify socket ?
 #ifdef _WIN32
-        int err = WSAGetLastError();
         if (err == WSAECONNRESET || err == WSAECONNABORTED) {
 #else
         if (errno == 0 || errno == EPIPE) {
