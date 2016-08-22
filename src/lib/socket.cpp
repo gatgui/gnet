@@ -86,6 +86,7 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 TCPSocket::~TCPSocket() {
   closeAll();
   if (isValid()) {
+    ::shutdown(mFD, SHUT_RDWR);
 #ifdef _WIN32
     closesocket(mFD);
 #else
@@ -118,6 +119,7 @@ void TCPSocket::closeAll() {
     if (conn->isValid()) {
       if (conn->fd() != mFD) {
         // mFD is a listening socket
+        conn->shutdown();
 #ifdef _WIN32
         closesocket(conn->fd());
 #else
@@ -166,6 +168,7 @@ void TCPSocket::close(TCPConnection *conn) {
       if (conn->isValid()) {
         if (conn->fd() != fd()) {
           // mFD is a listening socket
+          conn->shutdown();
 #ifdef _WIN32
           closesocket(conn->fd());
 #else
