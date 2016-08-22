@@ -28,9 +28,14 @@ int main(int argc, char **argv) {
   
   gnet::TCPSocket socket(host);
   
-  std::cout << "Connect to server...";
-  gnet::TCPConnection *conn = socket.connect();
-  std::cout << "DONE" << std::endl;
+  gnet::TCPConnection *conn = 0;
+  try {
+    std::cout << "Connect to server..." << std::endl;
+    conn = socket.connect();
+  } catch (std::exception &e) {
+    std::cout << "Failed to connect (" << e.what() << ")" << std::endl;
+    return 1;
+  }
 
   try {
     bool end = false;
@@ -39,6 +44,7 @@ int main(int argc, char **argv) {
       
       char buffer[512];
       
+      std::cout << "Input text: ";
       if (!fgets(buffer, 512, stdin)) {
         end = true;
         continue;
@@ -50,16 +56,13 @@ int main(int argc, char **argv) {
       }
       
       if (!strcmp(buffer, "QUIT")) {
+        conn->shutdown();
         end = true;
+      
+      } else {
+        std::cout << "Send data: \"" << buffer << "\"..." << std::endl;
+        conn->write(buffer, len-1);
       }
-      
-      std::cout << "Send data: \"" << buffer << "\"...";
-      bool rv = conn->write(buffer, len-1);
-      std::cout << "DONE (" << rv << ")" << std::endl;
-      
-      // to check if connection is alive
-      // do a non-blocking read, and check for 0 result
-      // read(fd, buffer, len, MSG_NONBLOCK) == 0
     }
     
   } catch (std::exception &e) {
@@ -71,9 +74,7 @@ int main(int argc, char **argv) {
   std::cout << "Press any Key to Terminate" << std::endl;
   fgets(buffer, 8, stdin);
   
-  std::cout << "Close connection...";
   socket.close(conn);
-  std::cout << "DONE" << std::endl;
   
   gnet::Uninitialize();
   
