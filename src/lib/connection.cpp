@@ -182,13 +182,11 @@ void TCPConnection::invalidate() {
 
 bool TCPConnection::isAlive() const {
   if (isValid()) {
-    char rdbuf[8];
-    
+    char c = '\0';
     // Try to read something from mFD, 0 is returned if connection is closed.
     // This assumes that the connection is not blocking.
     // Use MSG_PEEK to avoid pulling data we're not supposed to
-    return (recv(mFD, rdbuf, 8, MSG_PEEK) != 0);
-  
+    return (recv(mFD, &c, 1, MSG_PEEK) != 0);
   } else {
     return false;
   }
@@ -419,6 +417,8 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
     // If connection is remotly closed, 'send' will result in a SIGPIPE signal on unix systems
     
     /*
+    // Using isAlive seems to respond faster to remove connection close
+    // But it can be blocking!
     if (!isAlive()) {
       this->invalidate();
       throw Exception("TCPConnection", "Connection was remotely closed.");
