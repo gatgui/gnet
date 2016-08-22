@@ -32,9 +32,21 @@ Exception::Exception(const std::string &klass, const std::string &msg, bool useE
   mMsg += msg;
   if (useErrno == true) {
     mMsg += " [";
+#ifdef _WIN32
+    int err = WSAGetLastError();
+    LPTSTR buffer = NULL; 
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
+                  NULL, err, MAKELANGID(LANG_ENGLISH,SUBLANG_DEFAULT),
+                  (LPTSTR)&buffer, 0, NULL);
+    if (buffer) {
+      mMsg += std::string(buffer);
+      LocalFree(buffer);
+    }
+#else
     mMsg += strerror(errno);
+    // errno = 0;
+#endif
     mMsg += "]";
-    errno = 0;
   }
 }
 
