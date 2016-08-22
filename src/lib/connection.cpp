@@ -194,6 +194,27 @@ bool TCPConnection::isAlive() const {
   }
 }
 
+bool TCPConnection::readShutdown() {
+  if (isValid()) {
+    return (::shutdown(mFD, SHUT_RD) == 0);
+  }
+  return false;
+}
+
+bool TCPConnection::writeShutdown() {
+  if (isValid()) {
+    return (::shutdown(mFD, SHUT_WR) == 0);
+  }
+  return false;
+}
+
+bool TCPConnection::shutdown() {
+  if (isValid()) {
+    return (::shutdown(mFD, SHUT_RDWR) == 0);
+  }
+  return false;
+}
+
 bool TCPConnection::read(char *&bytes, size_t &len, double timeout) throw(Exception) {
   return readUntil(NULL, bytes, len, timeout);
 }

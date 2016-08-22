@@ -110,6 +110,10 @@ namespace gnet {
       virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception);
       virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception);
       
+      bool readShutdown();
+      bool writeShutdown();
+      bool shutdown();
+      
       inline const Host& host() const {
         return mHost;
       }
