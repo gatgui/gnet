@@ -66,14 +66,18 @@ Socket& Socket::operator=(const Socket&) {
 // ---
 
 TCPSocket::TCPSocket(unsigned short port) throw(Exception)
-  : Socket(port) {
+  : Socket(port)
+  , mDefaultBlocking(false)
+  , mDefaultLinger(true) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
   mCurReadConnection = mReadConnections.end();
   mCurWriteConnection = mWriteConnections.end();
 }
 
 TCPSocket::TCPSocket(const Host &host) throw(Exception)
-  : Socket(host) {
+  : Socket(host)
+  , mDefaultBlocking(false)
+  , mDefaultLinger(true) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
   mCurReadConnection = mReadConnections.end();
   mCurWriteConnection = mWriteConnections.end();
@@ -178,13 +182,21 @@ void TCPSocket::close(TCPConnection *conn) {
   }
 }
 
+void TCPSocket::setDefaultBlocking(bool blocking) {
+  mDefaultBlocking = blocking;
+}
+
+void TCPSocket::setDefaultLinger(bool linger) {
+  mDefaultLinger = linger;
+}
+
 void TCPSocket::setup(TCPConnection *conn) {
   
   // may want to expose the setup values
   
-  conn->setBlocking(false);
+  conn->setBlocking(mDefaultBlocking);
   
-  // linger?
+  conn->setLinger(mDefaultLinger);
   
 #ifdef SO_NOSIGPIPE
   int nosigpipe = 1;

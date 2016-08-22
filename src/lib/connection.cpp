@@ -126,6 +126,25 @@ bool Connection::setBlocking(bool blocking) {
 #endif
 }
 
+bool Connection::setLinger(bool onoff) {
+  if (!isValid()) {
+    return false;
+  }
+#ifdef SO_LINGER
+  struct linger l;
+  socklen_t optlen = sizeof(struct linger);
+  if (onoff) {
+    // get current value to preserve timeout
+    if (::getsockopt(mFD, SOL_SOCKET, SO_LINGER, (char*)&l, &optlen) != 0) {
+      return false;
+    }
+  }
+  l.l_onoff = (onoff ? 1 : 0);
+  return (::setsockopt(mFD, SOL_SOCKET, SO_LINGER, (const char*)&l, sizeof(struct linger)) == 0);
+#else
+  return false;
+#endif
+}
 
 bool Connection::read(std::string &s, double timeout) throw(Exception) {
   char *bytes = 0;

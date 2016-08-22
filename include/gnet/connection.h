@@ -69,6 +69,7 @@ namespace gnet {
       void setBufferSize(unsigned long n);
       
       bool setBlocking(bool blocking);
+      bool setLinger(bool linger);
     
     private:
       

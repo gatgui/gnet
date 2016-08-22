@@ -100,6 +100,9 @@ namespace gnet {
       TCPConnection* connect() throw(Exception);
       void close(TCPConnection*);
       void closeAll();
+      
+      void setDefaultBlocking(bool blocking);
+      void setDefaultLinger(bool linger);
     
     protected:
       
@@ -123,8 +126,8 @@ namespace gnet {
       ConnectionList mWriteConnections;
       ConnectionList::iterator mCurReadConnection;
       ConnectionList::iterator mCurWriteConnection;
-      
-      
+      bool mDefaultBlocking;
+      bool mDefaultLinger;
   };
   
 }
