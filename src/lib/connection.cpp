@@ -113,7 +113,7 @@ bool Connection::setBlocking(bool blocking) {
     return false;
   }
 #ifdef _WIN32
-  u_long arg = (blocking ? 0 : 1);
+  ULONG arg = (blocking ? 0 : 1);
   return (::ioctlsocket(mFD, FIONBIO, &arg) == 0);
 #else
   int flags = ::fcntl(mFD, F_GETFL, NULL);

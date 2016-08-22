@@ -59,11 +59,19 @@ const char* Exception::what() const throw() {
 
 // ---
 
-void Initialize() {
+bool Initialize() {
 #ifdef _WIN32
   WSADATA wsadata;
-  WSAStartup(MAKEWORD(1, 0), &wsadata);
+  if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) {
+    return false;
+  }
+  // Confirm that the WinSock DLL supports 2.2
+  if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
+    WSACleanup();
+    return false;
+  }
 #endif
+  return true;
 }
 
 void Uninitialize() {

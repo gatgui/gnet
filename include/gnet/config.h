@@ -94,7 +94,7 @@ typedef int sock_t;
 
 namespace gnet {
   
-  GNET_API void Initialize();
+  GNET_API bool Initialize();
   GNET_API void Uninitialize();
   
   class GNET_API Exception : public std::exception {

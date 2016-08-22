@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
   }
   
   std::string server = "localhost";
-  unsigned short port = 8080;
+  unsigned short port = 4001;
 
   if (argc >= 2) {
     server = argv[1];
@@ -20,7 +20,9 @@ int main(int argc, char **argv) {
     sscanf(argv[2], "%hu", &port);
   }
 
-  gnet::Initialize();
+  if (!gnet::Initialize()) {
+    return 1;
+  }
 
   std::cout << "Get Host...";
   gnet::Host host(server, port);

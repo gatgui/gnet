@@ -18,11 +18,13 @@ int ReadStdin() {
 
 int main(int, char**) {
   
-  gnet::Initialize();
+  if (!gnet::Initialize()) {
+    return 1;
+  }
 
   // Create a new scope so that socket destructor is called before gnet::Uninitialize
   {
-    gnet::TCPSocket socket(8080);
+    gnet::TCPSocket socket(4001);
     
     try {
       socket.bindAndListen(5);

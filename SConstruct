@@ -40,6 +40,8 @@ def RequireGnet(env):
   
   if static:
     env.Append(CPPDEFINES=["GNET_STATIC"])
+    if str(Platform()) == "win32":
+      env.Append(LIBS=["ws2_32"])
   
   RequireGcore(env)
 
@@ -56,6 +58,7 @@ prjs = [
     "defs"         : ["GNET_STATIC"] if static else ["GNET_EXPORTS"] ,
     "install"      : {"include": ["include/gnet"]},
     "custom"       : [RequireGcore],
+    "libs"         : (["ws2_32"] if (not static and str(Platform()) == "win32") else []),
     "deps"         : ["gcore"]
   },
   { "name"    : "gnet_tests",

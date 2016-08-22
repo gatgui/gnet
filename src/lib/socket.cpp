@@ -324,7 +324,7 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
   int rv = peek(readable, writable, timeout, &readfds, &writefds);
   
   if (rv == -1) {
-    throw Exception("TCPSocket", "", true);
+    throw Exception("TCPSocket", "Select failed", true);
   }
   
   if (readable) {
