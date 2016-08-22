@@ -80,8 +80,7 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 }
 
 TCPSocket::~TCPSocket() {
-  // closeAll();
-  
+  closeAll();
   if (isValid()) {
 #ifdef _WIN32
     closesocket(mFD);
@@ -112,12 +111,17 @@ void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
 void TCPSocket::closeAll() {
   for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
     TCPConnection *conn = *it;
-    if (conn->isValid() && conn->fd() != mFD) {
+    if (conn->isValid()) {
+      if (conn->fd() != mFD) {
+        // mFD is a listening socket
 #ifdef _WIN32
-      closesocket(mFD);
+        closesocket(conn->fd());
 #else
-      ::close(mFD);
+        ::close(conn->fd());
 #endif
+      } else {
+        // mFD is a single connection socket
+      }
     }
     delete conn;
   }
@@ -155,12 +159,17 @@ void TCPSocket::close(TCPConnection *conn) {
       }
       
       // do not close connection that have same id
-      if (conn->isValid() && conn->fd() != fd()) {
+      if (conn->isValid()) {
+        if (conn->fd() != fd()) {
+          // mFD is a listening socket
 #ifdef _WIN32
-        closesocket(conn->fd());
+          closesocket(conn->fd());
 #else
-        ::close(conn->fd());
+          ::close(conn->fd());
 #endif
+        } else {
+          // mFD is a single connection socket
+        }
       }
       
       // destroy it
@@ -219,7 +228,7 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   return conn;
 }
 
-bool TCPSocket::toTimeVal(double ms, struct timeval &tv) const {
+bool TCPSocket::toTimeval(double ms, struct timeval &tv) const {
   if (ms < 0) {
     return false;
   }
@@ -239,23 +248,29 @@ bool TCPSocket::toTimeVal(double ms, struct timeval &tv) const {
     
   }
   
-  return false;
+  return true;
 }
 
-int TCPSocket::peek(bool readable, bool writable, double timeout) const {
+int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfds, fd_set *writefds) const {
   struct timeval _tv;
   struct timeval *tv = 0;
   int curfd, maxfd = -1;
   fd_set _readfds;
   fd_set _writefds;
-  fd_set *readfds = (readable ? &_readfds : NULL);
-  fd_set *writefds = (writable ? &_writefds : NULL);
   
   if (!readable && !writable) {
     return 0;
   }
   
-  if (toTimeVal(timeout, _tv)) {
+  if (readable && !readfds) {
+    readfds = &_readfds;
+  }
+  
+  if (writable && !writefds) {
+    writefds = &_writefds;
+  }
+  
+  if (toTimeval(timeout, _tv)) {
     tv = &_tv;
   }
   
@@ -295,73 +310,31 @@ int TCPSocket::peek(bool readable, bool writable, double timeout) const {
 }
 
 size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exception) {
-  struct timeval _tv;
-  struct timeval *tv = 0;
-  int curfd, maxfd = -1;
-  fd_set _readfds;
-  fd_set _writefds;
-  fd_set *readfds = (readable ? &_readfds : NULL);
-  fd_set *writefds = (writable ? &_writefds : NULL);
+  mReadConnections.clear();
+  mWriteConnections.clear();
+  mCurReadConnection = mReadConnections.begin();
+  mCurWriteConnection = mWriteConnections.begin();
   
   if (!readable && !writable) {
     return 0;
   }
   
-  if (toTimeVal(timeout, _tv)) {
-    tv = &_tv;
-  }
-  
-  if (readable) {
-    FD_ZERO(readfds);
-    FD_SET(mFD, readfds);
-    maxfd = mFD;
-  }
-  
-  if (writable) {
-    FD_ZERO(writefds);
-    FD_SET(mFD, writefds);
-    maxfd = mFD;
-  }
-  
-  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
-    TCPConnection *conn = *it;
+  fd_set readfds, writefds;
     
-    if (conn->isValid()) {
-      if (readable) {
-        FD_SET(conn->fd(), readfds);
-      }
-      
-      if (writable) {
-        FD_SET(conn->fd(), writefds);
-      }
-      
-      curfd = (int) conn->fd();
-      
-      if (curfd > maxfd) {
-        maxfd = curfd;
-      }
-    }
-  }
-  
-  mReadConnections.clear();
-  mWriteConnections.clear();
-  mCurReadConnection = mReadConnections.begin();
-  mCurWriteConnection = mWriteConnections.begin();
-    
-  int rv = ::select(maxfd+1, readfds, writefds, NULL, tv);
+  int rv = peek(readable, writable, timeout, &readfds, &writefds);
   
   if (rv == -1) {
     throw Exception("TCPSocket", "", true);
   }
   
   if (readable) {
-    if (FD_ISSET(mFD, readfds)) {
+    if (FD_ISSET(mFD, &readfds)) {
       this->accept();
     }
   }
   
   if (writable) {
-    if (FD_ISSET(mFD, writefds)) {
+    if (FD_ISSET(mFD, &writefds)) {
       // Nothing special to do here?
     }
   }
@@ -372,12 +345,12 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
       continue;
     }
     if (readable) {
-      if (FD_ISSET(conn->fd(), readfds)) {
+      if (FD_ISSET(conn->fd(), &readfds)) {
         mReadConnections.push_back(conn);
       }
     }
     if (writable) {
-      if (FD_ISSET(conn->fd(), writefds)) {
+      if (FD_ISSET(conn->fd(), &writefds)) {
         mWriteConnections.push_back(conn);
       }
     }

@@ -108,9 +108,9 @@ namespace gnet {
       TCPSocket& operator=(const TCPSocket&);
       
       void setup(TCPConnection *conn);
-      bool toTimeVal(double ms, struct timeval &tv) const;
+      bool toTimeval(double ms, struct timeval &tv) const;
       size_t select(bool readable, bool writable, double timeout) throw(Exception);
-      int peek(bool readable, bool writable, double timeout) const;
+      int peek(bool readable, bool writable, double timeout, fd_set *readfds=0, fd_set *writefds=0) const;
       
     protected:
       
