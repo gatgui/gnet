@@ -16,43 +16,49 @@ int ReadStdin() {
 
 int main(int, char**) {
   
-  if (!gnet::Initialize()) {
-    return 1;
-  }
+  gnet::GlobalInit gni;
 
-  // Create a new scope so that socket destructor is called before gnet::Uninitialize
+  if (gni)
   {
-    gnet::TCPSocket socket(4001);
+    gnet::Status stat;
+    gnet::TCPSocket socket(4001, &stat);
     
-    try {
-      socket.bindAndListen(5);
-    } catch (std::exception &e) {
-      std::cout << e.what() << std::endl;
-      gnet::Uninitialize();
+    if (!stat) {
+      std::cerr << stat << std::endl;
+      return 1;
+    }
+    
+    stat = socket.bindAndListen(5);
+    if (!stat) {
+      std::cerr << stat << std::endl;
       return 1;
     }
     
     gcore::Thread thr(&ReadStdin, NULL, true);
     
-    try {
-      std::cout << "Type 'QUIT' to exit." << std::endl;
+    std::cout << "Type 'QUIT' to exit." << std::endl;
       
-      while (thr.running()) {
-        if (socket.selectReadable(0)) {
-          gnet::TCPConnection *conn;
-          std::string data;
+    while (thr.running()) {
+      if (socket.selectReadable(0, &stat)) {
+        gnet::TCPConnection *conn;
+        std::string data;
+        
+        while ((conn = socket.nextReadable()) != NULL) {
+          if (conn->read(data, -1, &stat)) {
+            std::cout << "\"" << data << "\"" << std::endl;
           
-          while ((conn = socket.nextReadable()) != NULL) {
-            try {
-              if (conn->read(data)) {
-                std::cout << "\"" << data << "\"" << std::endl;
-              }
-            } catch (gnet::Exception &e) {
-              std::cerr << e.what() << std::endl;
-              // should I wait here?
-              socket.close(conn);
-            }
+          } else if (!stat) {
+            std::cerr << stat << std::endl;
+            // should I wait here?
+            socket.close(conn);
           }
+        }
+      
+      } else {
+        if (!stat) {
+          std::cerr << stat << std::endl;
+          break;
+          
         } else {
           // Passively wait 50ms
           // CPU consumption wise, tt is seems better to do select return immediately and follow with a sleep
@@ -60,13 +66,10 @@ int main(int, char**) {
           gcore::Thread::SleepCurrent(50);
         }
       }
-      
-    } catch (gnet::Exception &e) {
-      std::cout << e.what() << std::endl;
     }
+    
+    thr.join();
   }
-  
-  gnet::Uninitialize();
   
   return 0;
 }

@@ -97,14 +97,51 @@ namespace gnet {
   GNET_API bool Initialize();
   GNET_API void Uninitialize();
   
-  class GNET_API Exception : public std::exception {
-    public:
-      explicit Exception(const std::string &klass, const std::string &msg, bool useErrno=false);
-      virtual ~Exception() throw();
-      virtual const char* what() const throw();
-    private:
-      std::string mMsg;
+  class GNET_API GlobalInit {
+  public:
+    inline GlobalInit() {
+      mInitialized = Initialize();
+    }
+    inline ~GlobalInit() {
+      if (mInitialized) {
+        Uninitialize();
+      }
+    }
+    inline operator bool() const {
+      return mInitialized;
+    }
+  private:
+    bool mInitialized;
   };
+  
+  class GNET_API Status {
+  public:
+    Status();
+    Status(bool success, const char *msg=0, bool useErrno=false);
+    ~Status();
+    
+    Status& operator=(const Status &rhs);
+    inline operator bool () const { return mSuccess; }
+    inline bool operator ! () const { return !mSuccess; }
+    
+    void clear();
+    void set(bool success, const char *msg=0, bool useErrno=false);
+    
+    inline bool succeeded() const { return mSuccess; }
+    inline bool failed() const { return !mSuccess; }
+    inline int errcode() const { return mErrCode; }
+    inline const char* message() const { return mMsg.c_str(); }
+    
+  private:
+    bool mSuccess;
+    int mErrCode;
+    std::string mMsg;
+  };
+}
+
+inline std::ostream& operator<<(std::ostream &os, const gnet::Status &st) {
+  os << st.message();
+  return os;
 }
 
 #endif

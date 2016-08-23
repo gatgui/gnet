@@ -25,15 +25,40 @@ USA.
 
 namespace gnet {
 
-Exception::Exception(const std::string &klass, const std::string &msg, bool useErrno) {
-  mMsg = "gnet::";
-  mMsg += klass;
-  mMsg += " Error: ";
-  mMsg += msg;
-  if (useErrno == true) {
-    mMsg += " [";
+Status::Status()
+  : mSuccess(true)
+  , mErrCode(-1)
+  , mMsg("") {
+}
+
+Status::Status(bool success, const char *msg, bool useErrno) {
+  set(success, msg, useErrno);
+}
+
+Status::~Status() {
+}
+
+Status& Status::operator=(const Status &rhs) {
+  mSuccess = rhs.mSuccess;
+  mErrCode = rhs.mErrCode;
+  mMsg = rhs.mMsg;
+  return *this;
+}
+
+void Status::clear() {
+  mSuccess = true;
+  mErrCode = -1;
+  mMsg = "";
+}
+
+void Status::set(bool success, const char *msg, bool useErrno) {
+  mSuccess = success;
+  mErrCode = -1;
+  mMsg = (msg != NULL ? msg : "");
+  if (!mSuccess && useErrno) {
+    mMsg += " (";
 #ifdef _WIN32
-    int err = WSAGetLastError();
+    mErrCode = WSAGetLastError();
     LPTSTR buffer = NULL; 
     FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
                   NULL, err, MAKELANGID(LANG_ENGLISH,SUBLANG_DEFAULT),
@@ -43,18 +68,11 @@ Exception::Exception(const std::string &klass, const std::string &msg, bool useE
       LocalFree(buffer);
     }
 #else
-    mMsg += strerror(errno);
-    // errno = 0;
+    mErrCode = errno;
+    mMsg += strerror(mErrCode);
 #endif
-    mMsg += "]";
+    mMsg += ")";
   }
-}
-
-Exception::~Exception() throw() {
-}
-
-const char* Exception::what() const throw() {
-  return mMsg.c_str();
 }
 
 // ---

@@ -3,45 +3,48 @@
 #include <exception>
 
 int main(int argc, char **argv) {
-
-  if (argc > 3) {
-    std::cout << "test_client [server [port]]" << std::endl;
-    return -1;
-  }
   
-  std::string server = "localhost";
-  unsigned short port = 4001;
-
-  if (argc >= 2) {
-    server = argv[1];
-  }
-
-  if (argc >= 3) {
-    sscanf(argv[2], "%hu", &port);
-  }
-
-  if (!gnet::Initialize()) {
-    return 1;
-  }
-
-  std::cout << "Get Host...";
-  gnet::Host host(server, port);
-  std::cout << "DONE: " << host.address() << ":" << host.port() << std::endl;
+  gnet::GlobalInit gni;
   
-  gnet::TCPSocket socket(host);
-  
-  gnet::TCPConnection *conn = 0;
-  try {
-    std::cout << "Connect to server..." << std::endl;
-    conn = socket.connect();
-  } catch (std::exception &e) {
-    std::cout << e.what() << std::endl;
-    return 1;
-  }
-
-  try {
-    std::cout << "Type 'QUIT' to exit." << std::endl;
+  if (gni) {
     
+    if (argc > 3) {
+      std::cout << "test_client [server [port]]" << std::endl;
+      return 1;
+    }
+  
+    std::string server = "localhost";
+    unsigned short port = 4001;
+
+    if (argc >= 2) {
+      server = argv[1];
+    }
+
+    if (argc >= 3) {
+      sscanf(argv[2], "%hu", &port);
+    }
+    
+    gnet::Status stat;
+
+    std::cout << "Get Host...";
+    gnet::Host host(server, port);
+    std::cout << "DONE: " << host.address() << ":" << host.port() << std::endl;
+    
+    gnet::TCPSocket socket(host, &stat);
+    if (!stat) {
+      std::cerr << stat << std::endl;
+      return 1;
+    }
+    
+    std::cout << "Connect to server..." << std::endl;
+    gnet::TCPConnection *conn = socket.connect(&stat);
+    if (!conn) {
+      std::cerr << stat << std::endl;
+      return 1;
+    }
+
+    std::cout << "Type 'QUIT' to exit." << std::endl;
+      
     bool end = false;
     
     while (!end) {
@@ -65,22 +68,18 @@ int main(int argc, char **argv) {
       
       } else {
         std::cout << "Send data: \"" << buffer << "\"..." << std::endl;
-        conn->write(buffer, len-1);
+        if (conn->write(buffer, len-1, -1, &stat) == 0 && !stat) {
+          // nothing written and stat set to failed
+          std::cerr << stat << std::endl;
+          end = true;
+        }
       }
     }
     
-  } catch (std::exception &e) {
-    
-    std::cout << e.what() << std::endl;
+    char buffer[8];
+    std::cout << "Press any Key to Terminate" << std::endl;
+    fgets(buffer, 8, stdin);
   }
-  
-  char buffer[8];
-  std::cout << "Press any Key to Terminate" << std::endl;
-  fgets(buffer, 8, stdin);
-  
-  socket.close(conn);
-  
-  gnet::Uninitialize();
   
   return 0;
 }

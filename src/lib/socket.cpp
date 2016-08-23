@@ -30,12 +30,15 @@ USA.
 
 namespace gnet {
   
-Socket::Socket(unsigned short port) throw(Exception)
-  : mFD(NULL_SOCKET), mHost("localhost", port) {
+Socket::Socket(unsigned short port, Status *status)
+  : mFD(NULL_SOCKET), mHost("localhost", port, status) {
 }
 
-Socket::Socket(const Host &host) throw(Exception)
+Socket::Socket(const Host &host, Status *status)
   : mFD(NULL_SOCKET), mHost(host) {
+  if (status) {
+    status->set(true, NULL);
+  }
 }
 
 Socket::Socket(sock_t fd, const Host &host)
@@ -65,20 +68,30 @@ Socket& Socket::operator=(const Socket&) {
 
 // ---
 
-TCPSocket::TCPSocket(unsigned short port) throw(Exception)
-  : Socket(port)
+TCPSocket::TCPSocket(unsigned short port, Status *status)
+  : Socket(port, status)
   , mDefaultBlocking(false)
   , mDefaultLinger(true) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (status) {
+    if (mFD == NULL_SOCKET) {
+      status->set(false, "[gnet::TCPSocket]", true);
+    }
+  }
   mCurReadConnection = mReadConnections.end();
   mCurWriteConnection = mWriteConnections.end();
 }
 
-TCPSocket::TCPSocket(const Host &host) throw(Exception)
-  : Socket(host)
+TCPSocket::TCPSocket(const Host &host, Status *status)
+  : Socket(host, status)
   , mDefaultBlocking(false)
   , mDefaultLinger(true) {
   mFD = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (status) {
+    if (mFD == NULL_SOCKET) {
+      status->set(false, "[gnet::TCPSocket]", true);
+    }
+  }
   mCurReadConnection = mReadConnections.end();
   mCurWriteConnection = mWriteConnections.end();
 }
@@ -87,27 +100,24 @@ TCPSocket::~TCPSocket() {
   disconnect();
 }
 
-void TCPSocket::bind() throw(Exception) {
-  if (::bind(mFD, mHost, sizeof(struct sockaddr)) < 0) {
-    throw Exception("TCPSocket", "Could not bind socket.", true);
-  }
+Status TCPSocket::bind() {
+  return Status(::bind(mFD, mHost, sizeof(struct sockaddr)) == 0, "[gnet::TCPSocket::bind]", true);
 }
 
-void TCPSocket::listen(int maxConnections) throw(Exception) {
-  if (::listen(mFD, maxConnections) == -1) {
-    throw Exception("TCPSocket", "Cannot listen on socket.", true);
-  }
-  mMaxConnections = maxConnections;
+Status TCPSocket::listen(int maxConnections) {
+  return Status(::listen(mFD, maxConnections) == 0, "[gnet::TCPSocket::listen]", true);
 }
 
-void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
-  this->bind();
-  this->listen(maxConnections);
+Status TCPSocket::bindAndListen(int maxConnections) {
+  Status stat = this->bind();
+  if (stat) {
+    stat = this->listen(maxConnections);
+  }
+  return stat;
 }
 
 void TCPSocket::disconnect() {
   closeAll();
-  
   if (isValid()) {
     ::shutdown(mFD, SHUT_RDWR);
 #ifdef _WIN32
@@ -204,25 +214,23 @@ void TCPSocket::setDefaultLinger(bool linger) {
 }
 
 void TCPSocket::setup(TCPConnection *conn) {
-  
-  // may want to expose the setup values
-  
   conn->setBlocking(mDefaultBlocking);
-  
   conn->setLinger(mDefaultLinger);
-  
 #ifdef SO_NOSIGPIPE
   int nosigpipe = 1;
   setsockopt(mFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(int));
 #endif
 }
 
-TCPConnection* TCPSocket::connect() throw(Exception) {
+TCPConnection* TCPSocket::connect(Status *status) {
   
   socklen_t len = sizeof(struct sockaddr);
   
-  if (::connect(mFD, mHost, len) < 0) {
-    throw Exception("TCPSocket", "Could not connect.", true);
+  if (::connect(mFD, mHost, len) != 0) {
+    if (status) {
+      status->set(false, "[gnet::TCPSocket::connect] Failed to establish connection.", true);
+    }
+    return 0;
   }
   
   mConnections.push_back(new TCPConnection(this, mFD, mHost));
@@ -230,10 +238,14 @@ TCPConnection* TCPSocket::connect() throw(Exception) {
   TCPConnection *conn = mConnections.back();
   setup(conn);
   
+  if (status) {
+    status->set(true, NULL);
+  }
+  
   return conn;
 }
 
-TCPConnection* TCPSocket::accept() throw(Exception) {
+TCPConnection* TCPSocket::accept(Status *status) {
   
   Host h;
   
@@ -242,13 +254,20 @@ TCPConnection* TCPSocket::accept() throw(Exception) {
   sock_t fd = ::accept(mFD, h, &len);
   
   if (fd == NULL_SOCKET) {
-    throw Exception("TCPSocket", "Could not accept connection.", true);
+    if (status) {
+      status->set(false, "[gnet::TCPSocket::accept] Failed to accept connection.", true);
+    }
+    return 0;
   }
   
   mConnections.push_back(new TCPConnection(this, fd, h));
   
   TCPConnection *conn = mConnections.back();
   setup(conn);
+  
+  if (status) {
+    status->set(true, NULL);
+  }
   
   return conn;
 }
@@ -386,10 +405,6 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
     ret = -1;
   }
   
-  // for (size_t i=0; i<mEvents.size(); ++i) {
-  //   WSACloseEvent(mEvents[i]);
-  // }
-  
   return ret;
   
 #else
@@ -438,13 +453,16 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
 #endif
 }
 
-size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exception) {
+size_t TCPSocket::select(bool readable, bool writable, double timeout, Status *status) {
   mReadConnections.clear();
   mWriteConnections.clear();
   mCurReadConnection = mReadConnections.begin();
   mCurWriteConnection = mWriteConnections.begin();
   
   if (!readable && !writable) {
+    if (status) {
+      status->set(true, NULL);
+    }
     return 0;
   }
   
@@ -453,11 +471,15 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
   int rv = peek(readable, writable, timeout, &readfds, &writefds);
   
   if (rv == -1) {
-    throw Exception("TCPSocket", "Select failed", true);
+    if (status) {
+      status->set(false, "[gnet::TCPSocket::select]", true);
+    }
+    return 0;
   }
   
   if (readable) {
     if (FD_ISSET(mFD, &readfds)) {
+      // Note: this could fail!
       this->accept();
     }
   }
@@ -487,6 +509,10 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout) throw(Exc
   
   mCurReadConnection = mReadConnections.begin();
   mCurWriteConnection = mWriteConnections.begin();
+  
+  if (status) {
+    status->set(true, NULL);
+  }
   
   return (mReadConnections.size() + mWriteConnections.size());
 }

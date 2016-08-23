@@ -33,7 +33,7 @@ namespace gnet {
     public:
       
       Host();
-      Host(const std::string &addr, unsigned short port) throw(Exception);
+      Host(const std::string &addr, unsigned short port, Status *status=0);
       Host(const Host &rhs);
       ~Host();
 

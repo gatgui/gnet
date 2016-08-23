@@ -36,8 +36,8 @@ namespace gnet {
       
       friend class Connection;
       
-      Socket(unsigned short port) throw(Exception);
-      Socket(const Host &host) throw(Exception);
+      Socket(unsigned short port, Status *status=0);
+      Socket(const Host &host, Status *status=0);
       virtual ~Socket();
       
       bool isValid() const;
@@ -71,22 +71,22 @@ namespace gnet {
       
       friend class TCPConnection;
       
-      TCPSocket(unsigned short port) throw(Exception);
-      TCPSocket(const Host &host) throw(Exception);
+      TCPSocket(unsigned short port, Status *status=0);
+      TCPSocket(const Host &host, Status *status=0);
       virtual ~TCPSocket();
       
-      void bind() throw(Exception);
-      void listen(int maxConnections) throw(Exception);
-      void bindAndListen(int maxConnections) throw(Exception);
+      Status bind();
+      Status listen(int maxConnections);
+      Status bindAndListen(int maxConnections);
       void disconnect();
       
       // timeout in milliseconds
       // <0: blocking
       // =0: non-blocking
       // >0: non-blocking + timeout
-      inline size_t select(double timeout=-1) { return this->select(true, true, timeout); }
-      inline size_t selectReadable(double timeout=-1) { return this->select(true, false, timeout); }
-      inline size_t selectWritable(double timeout=-1) { return this->select(false, true, timeout); }
+      inline size_t select(double timeout=-1, Status *status=0) { return this->select(true, true, timeout, status); }
+      inline size_t selectReadable(double timeout=-1, Status *status=0) { return this->select(true, false, timeout, status); }
+      inline size_t selectWritable(double timeout=-1, Status *status=0) { return this->select(false, true, timeout, status); }
       // To use after a select and before next one
       TCPConnection* nextReadable();
       TCPConnection* nextWritable();
@@ -98,8 +98,8 @@ namespace gnet {
       inline int peekReadable(double timeout=-1) { return this->peek(true, false, timeout); }
       inline int peekWritable(double timeout=-1) { return this->peek(false, true, timeout); }
       
-      TCPConnection* accept() throw(Exception);
-      TCPConnection* connect() throw(Exception);
+      TCPConnection* accept(Status *status=0);
+      TCPConnection* connect(Status *status=0);
       void close(TCPConnection*);
       void closeAll();
       
@@ -114,7 +114,7 @@ namespace gnet {
       
       void setup(TCPConnection *conn);
       bool toTimeval(double ms, struct timeval &tv) const;
-      size_t select(bool readable, bool writable, double timeout) throw(Exception);
+      size_t select(bool readable, bool writable, double timeout, Status *status=0);
       int peek(bool readable, bool writable, double timeout, fd_set *readfds=0, fd_set *writefds=0);
       
     protected:

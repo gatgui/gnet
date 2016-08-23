@@ -33,7 +33,7 @@ Host::Host() {
   memset(&mAddr, 0, sizeof(struct sockaddr_in));
 }
 
-Host::Host(const std::string &addr, unsigned short port) throw(Exception) {
+Host::Host(const std::string &addr, unsigned short port, Status *status) {
 
   memset(&mAddr, 0, sizeof(struct sockaddr_in));
   mAddr.sin_family = AF_INET;
@@ -47,16 +47,27 @@ Host::Host(const std::string &addr, unsigned short port) throw(Exception) {
 #else
     inet_aton(addr.c_str(), &(mAddr.sin_addr));
 #endif
+    
+    if (status) {
+      status->set(true, NULL);
+    }
 
   } else {
     
     struct hostent *he = gethostbyname(addr.c_str());
     if (he == NULL) {
       std::ostringstream oss;
-      oss << "Could not find host: \"" << addr << "\"";
-      throw Exception("Host", oss.str());
+      oss << "[gnet::Host] Could not find host: \"" << addr << "\"";
+      if (status) {
+        status->set(false, oss.str().c_str());
+      }
+      
+    } else {
+      memcpy(&(mAddr.sin_addr.s_addr), he->h_addr, he->h_length);
+      if (status) {
+        status->set(true, NULL);
+      }
     }
-    memcpy(&(mAddr.sin_addr.s_addr), he->h_addr, he->h_length);
   }
   
 }

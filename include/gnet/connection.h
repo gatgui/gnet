@@ -43,9 +43,9 @@ namespace gnet {
       // timeout > 0 -> non-blocking + time limit
       // timeout is in milliseconds
       // return true when something is read
-      virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
-      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception) = 0;
-      virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception) = 0;
+      virtual bool read(char *&bytes, size_t &len, double timeout=-1, Status *status=0) = 0;
+      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1, Status *status=0) = 0;
+      virtual size_t write(const char* bytes, size_t len, double timeout=-1, Status *status=0) = 0;
       
       virtual bool isValid() const;
       virtual void invalidate();
@@ -54,9 +54,9 @@ namespace gnet {
       
       // for some reasons, if those 2 following functions are named 'read' and 'write'
       // calling them from TCPConnection instance resulted in compilation error on linux...
-      bool read(std::string &s, double timeout=-1) throw(Exception);
-      bool readUntil(const char *until, std::string &s, double timeout=-1) throw(Exception);
-      bool write(const std::string &s, double timeout=-1) throw(Exception);
+      bool read(std::string &s, double timeout=-1, Status *status=0);
+      bool readUntil(const char *until, std::string &s, double timeout=-1, Status *status=0);
+      size_t write(const std::string &s, double timeout=-1, Status *status=0);
       
       inline unsigned long getBufferSize() const {
         return mBufferSize;
@@ -67,7 +67,6 @@ namespace gnet {
       }
       
       void setBufferSize(unsigned long n);
-      
       bool setBlocking(bool blocking);
       bool setLinger(bool linger);
     
@@ -107,9 +106,9 @@ namespace gnet {
       using Connection::readUntil;
       using Connection::write;
       
-      virtual bool read(char *&bytes, size_t &len, double timeout=-1) throw(Exception);
-      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1) throw(Exception);
-      virtual bool write(const char* bytes, size_t len, double timeout=-1) throw(Exception);
+      virtual bool read(char *&bytes, size_t &len, double timeout=-1, Status *status=0);
+      virtual bool readUntil(const char *until, char *&bytes, size_t &len, double timeout=-1, Status *status=0);
+      virtual size_t write(const char* bytes, size_t len, double timeout=-1, Status *status=0);
       
       bool readShutdown();
       bool writeShutdown();

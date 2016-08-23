@@ -29,19 +29,21 @@ private:
 
 int main(int, char**) {
   
-  if (!gnet::Initialize()) {
-    return 1;
-  }
+  gnet::GlobalInit gni;
   
-  // Create a new scope so that socket destructor is called before gnet::Uninitialize
+  if (gni)
   {
-    gnet::TCPSocket socket(4001);
+    gnet::Status stat;
+    gnet::TCPSocket socket(4001, &stat);
     
-    try {
-      socket.bindAndListen(5);
-    } catch (std::exception &e) {
-      std::cout << e.what() << std::endl;
-      gnet::Uninitialize();
+    if (!stat) {
+      std::cerr << stat << std::endl;
+      return 1;
+    }
+    
+    stat = socket.bindAndListen(5);
+    if (!stat) {
+      std::cerr << stat << std::endl;
       return 1;
     }
     
@@ -50,41 +52,32 @@ int main(int, char**) {
     
     std::cout << "Type 'QUIT' to exit." << std::endl;
     
-    try {
-      while (thr.running()) {
-        char *buffer = 0;
-        size_t len = 0;
-        
-        gnet::TCPConnection *conn = socket.accept();
-        if (!conn) {
-          continue;
-        }
-        
-        std::cout << "Read data from connection: ";
-        try {
-          if (conn->read(buffer, len, -1)) {
-            if (buffer) {
-              std::cout << "\"" << buffer << "\"" << std::endl;
-              free(buffer);
-            } else {
-              std::cout << "<null>" << std::endl;
-            }
-          }
-        } catch (std::exception &e) {
-          std::cout << "Client error: " << e.what() << std::endl;
-        }
-        
-        socket.close(conn);
+    while (thr.running()) {
+      char *buffer = 0;
+      size_t len = 0;
+      
+      gnet::TCPConnection *conn = socket.accept(&stat);
+      if (!conn) {
+        std::cerr << "Server error: " << stat << std::endl;
+        continue;
       }
       
-    } catch (gnet::Exception &e) {
-      std::cout << "Server error: " << e.what() << std::endl;
+      if (conn->read(buffer, len, -1, &stat)) {
+        if (buffer) {
+          std::cout << "\"" << buffer << "\"" << std::endl;
+          free(buffer);
+        } else {
+          std::cout << "<null>" << std::endl;
+        }
+      } else if (!stat) {
+        std::cout << "Client error: " << stat << std::endl;
+      }
+      
+      socket.close(conn);
     }
     
     thr.join();
   }
-  
-  gnet::Uninitialize();
   
   return 0;
 }

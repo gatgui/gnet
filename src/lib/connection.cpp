@@ -146,10 +146,10 @@ bool Connection::setLinger(bool onoff) {
 #endif
 }
 
-bool Connection::read(std::string &s, double timeout) throw(Exception) {
+bool Connection::read(std::string &s, double timeout, Status *status) {
   char *bytes = 0;
   size_t len = 0;
-  bool rv = this->read(bytes, len, timeout);
+  bool rv = this->read(bytes, len, timeout, status);
   if (bytes != 0) {
     s = bytes;
     free(bytes);
@@ -159,10 +159,10 @@ bool Connection::read(std::string &s, double timeout) throw(Exception) {
   return rv;
 }
 
-bool Connection::readUntil(const char *until, std::string &s, double timeout) throw(Exception) {
+bool Connection::readUntil(const char *until, std::string &s, double timeout, Status *status) {
   char *bytes = 0;
   size_t len = 0;
-  bool rv = this->readUntil(until, bytes, len, timeout);
+  bool rv = this->readUntil(until, bytes, len, timeout, status);
   if (bytes != 0) {
     s = bytes;
     free(bytes);
@@ -172,8 +172,8 @@ bool Connection::readUntil(const char *until, std::string &s, double timeout) th
   return rv;
 }
 
-bool Connection::write(const std::string &s, double timeout) throw(Exception) {
-   return this->write(s.c_str(), s.length(), timeout);
+size_t Connection::write(const std::string &s, double timeout, Status *status) {
+   return this->write(s.c_str(), s.length(), timeout, status);
 }
 
 // ---
@@ -233,13 +233,16 @@ bool TCPConnection::shutdown() {
   return false;
 }
 
-bool TCPConnection::read(char *&bytes, size_t &len, double timeout) throw(Exception) {
-  return readUntil(NULL, bytes, len, timeout);
+bool TCPConnection::read(char *&bytes, size_t &len, double timeout, Status *status) {
+  return readUntil(NULL, bytes, len, timeout, status);
 }
 
-bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, double timeout) throw(Exception) {
+bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, double timeout, Status *status) {
   if (!isValid()) {
-    throw Exception("TCPConnection", "Invalid connections.");
+    if (status) {
+      status->set(false, "[gnet::TCPConnection::readUntil] Invalid connection.", true);
+    }
+    return false;
   }
   
   if (mBufferSize == 0) {
@@ -254,19 +257,13 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
   bytes = 0;
   len = 0;
   
-#ifdef _DEBUG
-  std::cout << "gnet::TCPConnection::read: until \"" << (until ? until : "") << "\"" << std::endl;
-#endif
-  
   // If set, check for until string in remaining bytes of last read
   if (until != NULL && mBufferOffset > 0) {
     // Note: mBuffer[mBufferOffset] == '\0'
     size_t ulen = strlen(until);
     char *found = strstr(mBuffer, until);
+    
     if (found != NULL) {
-#ifdef _DEBUG
-      std::cout << "gnet::TCPConnection::read: until found in remaining buffer" << std::endl;
-#endif
       size_t sublen = found + ulen - mBuffer;
       size_t rmnlen = mBufferOffset - sublen;
       bytes = (char*) malloc(sublen+1);
@@ -278,9 +275,10 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
         mBuffer[i] = mBuffer[sublen+i];
       }
       mBuffer[rmnlen] = '\0';
-#ifdef _DEBUG
-      std::cout << "gnet::TCPConnection::read: \"" << mBuffer << "\" remains in buffer" << std::endl;
-#endif
+      
+      if (status) {
+        status->set(true, NULL);
+      }
       return true;
     }
   }
@@ -291,6 +289,9 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     
     if (timeout > 0) {
       if (st.elapsed().value() > timeout) {
+        if (status) {
+          status->set(true, NULL);
+        }
         return false;
       }
     }
@@ -315,6 +316,9 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
             bytes = 0;
             len = 0;
           }
+          if (status) {
+            status->set(true, NULL);
+          }
           return false;
         
         } else {
@@ -327,14 +331,17 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
         }
       
       } else {
-        // Any other error -> raise an exception
+        // Any other error
         if (bytes) {
            free(bytes);
            bytes = 0;
            len = 0;
         }
         
-        throw Exception("TCPConnection", "Could not read from socket.", true);
+        if (status) {
+          status->set(false, "[gnet::TCPConnection::readUntil] Failed to read from socket.", true);
+        }
+        return false;
       }
     }
     
@@ -348,17 +355,14 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
          len = 0;
       }
       
-      // Raise an exception in order to differentiate from 'Nothing read'
-      // which is possible with non-blocking (timeout or not) reads
-      throw Exception("TCPConnection", "Connection was remotely closed.");
+      if (status) {
+        status->set(false, "[gnet::TCPConnection::readUntil] Connection remotely closed.");
+      }
+      return false;
     }
     
     full = (n == int(mBufferSize - mBufferOffset));
     mBufferOffset = 0;
-    
-#ifdef _DEBUG
-    std::cout << "gnet::TCPConnection::read: received " << n << " characters" << std::endl;
-#endif
     
     if (bytes == 0) {
       len = n;
@@ -381,14 +385,11 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
       bytes[len] = '\0';
     }
     
-#ifdef _DEBUG
-    std::cout << "gnet::TCPConnection::read: \"" << (bytes+len-n) << "\"" << std::endl;
-#endif
-    
     // Check for until string if set
     if (until != NULL) {
       size_t ulen = strlen(until);
       char *found = strstr(bytes+searchOffset, until);
+      
       if (found != NULL) {
         size_t sublen = found + ulen - (bytes + searchOffset);
         size_t rmnlen = n - sublen;
@@ -400,30 +401,38 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
           mBuffer[i] = mBuffer[sublen+i];
         }
         mBuffer[rmnlen] = '\0';
-#ifdef _DEBUG
-        std::cout << "gnet::TCPConnection::read: \"" << mBuffer << "\" remains in buffer" << std::endl;
-#endif
+        if (status) {
+          status->set(true, NULL);
+        }
         return true;
+      
       } else {
-#ifdef _DEBUG
-        std::cout << "gnet::TCPConnection::read: until not found, continue reading" << std::endl;
-#endif
+        // continue reading
         full = true;
       }
     }
     
   } while (full);
   
+  if (status) {
+    status->set(true, NULL);
+  }
   return true;
 }
 
-bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(Exception) {
+size_t TCPConnection::write(const char *bytes, size_t len, double timeout, Status *status) {
   if (!isValid()) {
-    throw Exception("TCPConnection", "Invalid connection.");
+    if (status) {
+      status->set(false, "[gnet::TCPConnection::write] Invalid connection.");
+    }
+    return 0;
   }
   
   if (len == 0) {
-    return true;
+    if (status) {
+      status->set(true, NULL);
+    }
+    return 0;
   }
   
   int offset = 0;
@@ -435,7 +444,10 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
     
     if (timeout > 0) {
       if (st.elapsed().value() > timeout) {
-        return false;
+        if (status) {
+          status->set(true, NULL);
+        }
+        return size_t(offset);
       }
     }
     
@@ -446,7 +458,10 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
     // But it can be blocking!
     if (!isAlive()) {
       this->invalidate();
-      throw Exception("TCPConnection", "Connection was remotely closed.");
+      if (status) {
+        status->set(false, "[gnet::TCPConnection::write] Connection remotely closed.");
+      }
+      return size_t(offset);
     }
     int n = send(mFD, bytes+offset, remaining, 0);
     */
@@ -482,7 +497,10 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
 #endif
         if (timeout == 0) {
-          return false;
+          if (status) {
+            status->set(true, NULL);
+          }
+          return size_t(offset);
         
         } else {
           if (timeout < 0) {
@@ -500,26 +518,29 @@ bool TCPConnection::write(const char *bytes, size_t len, double timeout) throw(E
         if (errno == 0 || errno == EPIPE) {
 #endif
           this->invalidate();
-          throw Exception("TCPConnection", "Connection was remotely closed.");
+          if (status) {
+            status->set(false, "[gnet::TCPConnection::write] Connection remotely closed.");
+          }
         
         } else {
-          // Socket should still usable, should just return false to differentiate?
-          throw Exception("TCPConnection", "Could not write to socket.", true);
+          if (status) {
+            status->set(false, "[gnet::TCPConnection::write] Failed to write to socket.", true);
+          }
         }
+        
+        return size_t(offset);
       }
     
     } else {
       remaining -= n;
       offset += n;
-#ifdef _DEBUG
-      if (remaining > 0) {
-        std::cout << "gnet::TCPConnection::write: " << remaining << " bytes of " << len << " remains to send..." << std::endl;
-      }
-#endif
     }
   }
   
-  return true;
+  if (status) {
+    status->set(true, NULL);
+  }
+  return size_t(offset);
 }
   
 }
