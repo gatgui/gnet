@@ -78,6 +78,7 @@ namespace gnet {
       void bind() throw(Exception);
       void listen(int maxConnections) throw(Exception);
       void bindAndListen(int maxConnections) throw(Exception);
+      void disconnect();
       
       // timeout in milliseconds
       // <0: blocking

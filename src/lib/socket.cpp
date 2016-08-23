@@ -84,15 +84,7 @@ TCPSocket::TCPSocket(const Host &host) throw(Exception)
 }
 
 TCPSocket::~TCPSocket() {
-  closeAll();
-  if (isValid()) {
-    ::shutdown(mFD, SHUT_RDWR);
-#ifdef _WIN32
-    closesocket(mFD);
-#else
-    ::close(mFD);
-#endif
-  }
+  disconnect();
 }
 
 void TCPSocket::bind() throw(Exception) {
@@ -111,6 +103,20 @@ void TCPSocket::listen(int maxConnections) throw(Exception) {
 void TCPSocket::bindAndListen(int maxConnections) throw(Exception) {
   this->bind();
   this->listen(maxConnections);
+}
+
+void TCPSocket::disconnect() {
+  closeAll();
+  
+  if (isValid()) {
+    ::shutdown(mFD, SHUT_RDWR);
+#ifdef _WIN32
+    closesocket(mFD);
+#else
+    ::close(mFD);
+#endif
+    invalidate();
+  }
 }
 
 void TCPSocket::closeAll() {
