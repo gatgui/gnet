@@ -61,7 +61,7 @@ void Status::set(bool success, const char *msg, bool useErrno) {
     mErrCode = WSAGetLastError();
     LPTSTR buffer = NULL; 
     FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
-                  NULL, err, MAKELANGID(LANG_ENGLISH,SUBLANG_DEFAULT),
+                  NULL, WSAGetLastError(), MAKELANGID(LANG_ENGLISH,SUBLANG_DEFAULT),
                   (LPTSTR)&buffer, 0, NULL);
     if (buffer) {
       mMsg += std::string(buffer);
