@@ -1,20 +1,31 @@
 #include <gcore/all.h>
 #include <gnet/all.h>
 
-int ReadStdin() {
-  bool end = false;
-  char rdbuf[512];
-  while (!end) {
-    if (fgets(rdbuf, 512, stdin)) {
-      std::cout << "STDIN: \"" << rdbuf << "\"" << std::endl;
-      if (!strncmp(rdbuf, "QUIT", 4)) {
-        std::cout << "Read 'QUIT'" << std::endl;
-        end = true;
+class ReadStdin {
+public:
+  ReadStdin(gnet::TCPSocket *socket)
+    : mSocket(socket) {
+  }
+  ~ReadStdin() {
+  }
+  int run() {
+    bool end = false;
+    char rdbuf[512];
+    while (!end) {
+      if (fgets(rdbuf, 512, stdin)) {
+        if (!strncmp(rdbuf, "QUIT", 4)) {
+          end = true;
+        }
       }
     }
+    if (mSocket) {
+      mSocket->disconnect();
+    }
+    return 0;
   }
-  return 0;
-}
+private:
+  gnet::TCPSocket *mSocket;
+};
 
 int main(int, char**) {
   
@@ -34,25 +45,18 @@ int main(int, char**) {
       return 1;
     }
     
-    gcore::Thread thr(&ReadStdin, NULL, true);
+    ReadStdin reader(&socket);
+    gcore::Thread thr(&reader, METHOD(ReadStdin, run), true);
+    
+    std::cout << "Type 'QUIT' to exit." << std::endl;
     
     try {
       while (thr.running()) {
         char *buffer = 0;
         size_t len = 0;
         
-        std::cout << "Accept new connection..." << std::endl;
-        
-        gnet::TCPConnection *conn = 0;
-        try {
-          conn = socket.accept();
-        } catch (std::exception &e) {
-          std::cout << "ERROR " << e.what() << std::endl;
-          continue;
-        }
-        
+        gnet::TCPConnection *conn = socket.accept();
         if (!conn) {
-          std::cout << "ERROR (unknown)" << std::endl;
           continue;
         }
         
@@ -66,18 +70,18 @@ int main(int, char**) {
               std::cout << "<null>" << std::endl;
             }
           }
-          
-          std::cout << "Close connection" << std::endl;
-          socket.close(conn);
-          
         } catch (std::exception &e) {
-          std::cout << "ERROR " << e.what() << std::endl;
+          std::cout << "Client error: " << e.what() << std::endl;
         }
+        
+        socket.close(conn);
       }
       
     } catch (gnet::Exception &e) {
-      std::cout << e.what() << std::endl;
+      std::cout << "Server error: " << e.what() << std::endl;
     }
+    
+    thr.join();
   }
   
   gnet::Uninitialize();

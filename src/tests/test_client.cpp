@@ -35,11 +35,13 @@ int main(int argc, char **argv) {
     std::cout << "Connect to server..." << std::endl;
     conn = socket.connect();
   } catch (std::exception &e) {
-    std::cout << "Failed to connect (" << e.what() << ")" << std::endl;
+    std::cout << e.what() << std::endl;
     return 1;
   }
 
   try {
+    std::cout << "Type 'QUIT' to exit." << std::endl;
+    
     bool end = false;
     
     while (!end) {

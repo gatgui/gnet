@@ -6,9 +6,7 @@ int ReadStdin() {
   char rdbuf[512];
   while (!end) {
     if (fgets(rdbuf, 512, stdin)) {
-      std::cout << "STDIN: \"" << rdbuf << "\"" << std::endl;
       if (!strncmp(rdbuf, "QUIT", 4)) {
-        std::cout << "Read 'QUIT'" << std::endl;
         end = true;
       }
     }
@@ -37,9 +35,9 @@ int main(int, char**) {
     gcore::Thread thr(&ReadStdin, NULL, true);
     
     try {
-      bool waiting = false;
+      std::cout << "Type 'QUIT' to exit." << std::endl;
+      
       while (thr.running()) {
-        // non-blocking select
         if (socket.selectReadable(0)) {
           gnet::TCPConnection *conn;
           std::string data;
@@ -50,27 +48,20 @@ int main(int, char**) {
                 std::cout << "\"" << data << "\"" << std::endl;
               }
             } catch (gnet::Exception &e) {
-              std::cerr << "ERROR " << e.what() << std::endl;
+              std::cerr << e.what() << std::endl;
               // should I wait here?
               socket.close(conn);
             }
           }
-          
-          waiting = false;
-        
         } else {
-          if (!waiting) {
-            std::cout << "Nothing to read yet" << std::endl;
-          }
-          
-          gcore::Thread::SleepCurrent(1000); // 1s
-          
-          waiting = true;
+          // Passively wait 50ms
+          // CPU consumption wise, tt is seems better to do select return immediately and follow with a sleep
+          // than to do a timed out select
+          gcore::Thread::SleepCurrent(50);
         }
       }
       
     } catch (gnet::Exception &e) {
-      
       std::cout << e.what() << std::endl;
     }
   }
