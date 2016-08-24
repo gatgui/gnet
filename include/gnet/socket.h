@@ -120,8 +120,12 @@ namespace gnet {
       // close a single connection
       void close(TCPConnection*);
       
-      // destroy invalid connections objects
-      void cleanup();
+      // Cleanup closed connections objects
+      // 
+      // Arguments
+      //   [in] flushPending : Closed connection may still have remaining data in their internal read buffer.
+      //                       Set to false, cleanup will keep suchs so that data can still be queried.
+      void cleanup(bool flushPending=false);
       
       
     protected:

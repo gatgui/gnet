@@ -166,14 +166,14 @@ void TCPSocket::close(TCPConnection *conn) {
   }
 }
 
-void TCPSocket::cleanup() {
+void TCPSocket::cleanup(bool flushPending) {
   ConnectionList::iterator it1 = mConnections.begin();
   ConnectionList::iterator it2;
   
   while (it1 != mConnections.end()) {
     TCPConnection *conn = *it1;
     
-    if (!conn->isValid() && !conn->hasPendingData()) {
+    if (!conn->isValid() && (flushPending || !conn->hasPendingData())) {
       // Remove from readable connections
       it2 = std::find(mReadConnections.begin(), mReadConnections.end(), conn);
       if (it2 != mReadConnections.end()) {
