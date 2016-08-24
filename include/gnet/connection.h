@@ -67,7 +67,9 @@ namespace gnet {
       //   'bytes', if allocated, MUST be freed by the caller no matter the return value or error status
       virtual bool read(char *&bytes, size_t &len, double timeout=-1, Status *status=0) = 0;
       // Arguments
-      //   As for 'read'
+      //   See 'read'
+      //   [in] until : character string to look for in read data (included in result)
+      //                when set to NULL, 'readUntil' behaves as 'read'
       //
       // Return value
       //   true if the 'until' string was from in read bytes, false otherwise
