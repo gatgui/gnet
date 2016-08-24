@@ -97,7 +97,12 @@ TCPSocket::TCPSocket(const Host &host, Status *status)
 }
 
 TCPSocket::~TCPSocket() {
-  disconnect();
+  close();
+  // 'close' doesn't destroy Connection objects (on purpose)
+  for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+    delete *it;
+  }
+  mConnections.clear();
 }
 
 Status TCPSocket::bind() {
@@ -116,91 +121,87 @@ Status TCPSocket::bindAndListen(int maxConnections) {
   return stat;
 }
 
-void TCPSocket::disconnect() {
-  closeAll();
+void TCPSocket::clearEvents() {
+#ifdef _WIN32
+  for (size_t i=0; i<mEvents.size(); ++i) {
+    WSACloseEvent(mEvents[i]);
+  }
+  mEvents.clear();
+  mEventConns.clear();
+#endif
+}
+
+void TCPSocket::close() {
+  closeConnections();
+  
   if (isValid()) {
     ::shutdown(mFD, SHUT_RDWR);
-#ifdef _WIN32
-    closesocket(mFD);
-#else
-    ::close(mFD);
-#endif
+    sock_close(mFD);
     invalidate();
   }
 }
 
-void TCPSocket::closeAll() {
+void TCPSocket::closeConnections() {
   for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
-    TCPConnection *conn = *it;
-    if (conn->isValid()) {
-      if (conn->fd() != mFD) {
-        // mFD is a listening socket
-        conn->shutdown();
-#ifdef _WIN32
-        closesocket(conn->fd());
-#else
-        ::close(conn->fd());
-#endif
-      } else {
-        // mFD is a single connection socket
-      }
-    }
-    delete conn;
+    close(*it);
   }
-  
-  mConnections.clear();
   mReadConnections.clear();
   mWriteConnections.clear();
-  
-#ifdef _WIN32
+  mCurReadConnection = mReadConnections.end();
+  mCurWriteConnection = mWriteConnections.end();
   clearEvents();
-#endif
 }
 
 void TCPSocket::close(TCPConnection *conn) {
-  if (conn) {
+  if (conn && conn->isValid()) {
+    bool self = (conn->fd() == mFD);
     
-    ConnectionList::iterator it = std::find(mConnections.begin(), mConnections.end(), conn);
+    conn->shutdown();
+    sock_close(conn->fd());
     
-    if (it != mConnections.end()) {
-      
-      mConnections.erase(it);
-      
-      it = std::find(mReadConnections.begin(), mReadConnections.end(), conn);
-      if (it != mReadConnections.end()) {
-        bool upd = (mCurReadConnection == it);
-        it = mReadConnections.erase(it);
+    conn->invalidate();
+    if (self) {
+      invalidate();
+    }
+  }
+}
+
+void TCPSocket::cleanup() {
+  ConnectionList::iterator it1 = mConnections.begin();
+  ConnectionList::iterator it2;
+  
+  while (it1 != mConnections.end()) {
+    TCPConnection *conn = *it1;
+    
+    if (!conn->isValid() && !conn->hasPendingData()) {
+      // Remove from readable connections
+      it2 = std::find(mReadConnections.begin(), mReadConnections.end(), conn);
+      if (it2 != mReadConnections.end()) {
+        bool upd = (mCurReadConnection == it2);
+        it2 = mReadConnections.erase(it2);
         if (upd) {
-          mCurReadConnection = it;
+          mCurReadConnection = it2;
         }
       }
       
-      it = std::find(mWriteConnections.begin(), mWriteConnections.end(), conn);
-      if (it != mWriteConnections.end()) {
-        bool upd = (mCurWriteConnection == it);
-        it = mWriteConnections.erase(it);
+      // Remove from writable connections
+      it2 = std::find(mWriteConnections.begin(), mWriteConnections.end(), conn);
+      if (it2 != mWriteConnections.end()) {
+        bool upd = (mCurWriteConnection == it2);
+        it2 = mWriteConnections.erase(it2);
         if (upd) {
-          mCurWriteConnection = it;
+          mCurWriteConnection = it2;
         }
       }
       
-      // do not close connection that have same id
-      if (conn->isValid()) {
-        if (conn->fd() != fd()) {
-          // mFD is a listening socket
-          conn->shutdown();
-#ifdef _WIN32
-          closesocket(conn->fd());
-#else
-          ::close(conn->fd());
-#endif
-        } else {
-          // mFD is a single connection socket
-        }
-      }
+      // Remove from connections
+      it1 = mConnections.erase(it1);
       
-      // destroy it
+      // Delete object
       delete conn;
+    
+    } else {
+      ++it1;
     }
   }
 }
@@ -224,6 +225,8 @@ void TCPSocket::setup(TCPConnection *conn) {
 
 TCPConnection* TCPSocket::connect(Status *status) {
   
+  cleanup();
+  
   socklen_t len = sizeof(struct sockaddr);
   
   if (::connect(mFD, mHost, len) != 0) {
@@ -246,6 +249,8 @@ TCPConnection* TCPSocket::connect(Status *status) {
 }
 
 TCPConnection* TCPSocket::accept(Status *status) {
+  
+  cleanup();
   
   Host h;
   
@@ -295,16 +300,6 @@ bool TCPSocket::toTimeval(double ms, struct timeval &tv) const {
   return true;
 }
 
-#ifdef _WIN32
-void TCPSocket::clearEvents() {
-  for (size_t i=0; i<mEvents.size(); ++i) {
-    WSACloseEvent(mEvents[i]);
-  }
-  mEvents.clear();
-  mEventConns.clear();
-}
-#endif
-
 int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfds, fd_set *writefds) {
   fd_set _readfds;
   fd_set _writefds;
@@ -320,6 +315,10 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
   if (writable && !writefds) {
     writefds = &_writefds;
   }
+  
+  int ret = 0;
+  
+  //cleanup();
   
 #ifdef _WIN32
   
@@ -370,7 +369,6 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
   
   DWORD to = (timeout < 0 ? WSA_INFINITE : (DWORD) floor(timeout + 0.5));
   DWORD rv = WSAWaitForMultipleEvents(sz, &mEvents[0], FALSE, to, FALSE);
-  int ret = 0;
   
   if (rv == WSA_WAIT_FAILED) {
     ret = -1;
@@ -404,8 +402,6 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
     // unhandled error
     ret = -1;
   }
-  
-  return ret;
   
 #else
   
@@ -448,16 +444,38 @@ int TCPSocket::peek(bool readable, bool writable, double timeout, fd_set *readfd
     }
   }
   
-  return ::select(maxfd+1, readfds, writefds, NULL, tv);
+  ret = ::select(maxfd+1, (readable ? readfds : NULL), (writable ? writefds : NULL), NULL, tv);
   
 #endif
+  
+  // should add connections when pending data in their internal buffer
+  // even if invalid or not ready to read
+  if (ret != -1 && readable) {
+    for (ConnectionList::const_iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
+      TCPConnection *conn = *it;
+      if (conn->hasPendingData()) {
+        if (conn->isValid()) {
+          if (FD_ISSET(conn->fd(), readfds)) {
+            // already selected
+          } else {
+            FD_SET(conn->fd(), readfds);
+            ++ret;
+          }
+        } else {
+          ++ret;
+        }
+      }
+    }
+  }
+  
+  return ret;
 }
 
 size_t TCPSocket::select(bool readable, bool writable, double timeout, Status *status) {
   mReadConnections.clear();
   mWriteConnections.clear();
-  mCurReadConnection = mReadConnections.begin();
-  mCurWriteConnection = mWriteConnections.begin();
+  mCurReadConnection = mReadConnections.end();
+  mCurWriteConnection = mWriteConnections.end();
   
   if (!readable && !writable) {
     if (status) {
@@ -493,10 +511,13 @@ size_t TCPSocket::select(bool readable, bool writable, double timeout, Status *s
   for (ConnectionList::iterator it=mConnections.begin(); it!=mConnections.end(); ++it) {
     TCPConnection *conn = *it;
     if (!conn->isValid()) {
+      if (readable && conn->hasPendingData()) {
+        mReadConnections.push_back(conn);
+      }
       continue;
     }
     if (readable) {
-      if (FD_ISSET(conn->fd(), &readfds)) {
+      if (FD_ISSET(conn->fd(), &readfds) || conn->hasPendingData()) {
         mReadConnections.push_back(conn);
       }
     }
@@ -521,7 +542,7 @@ TCPConnection* TCPSocket::nextReadable() {
   TCPConnection *rv = NULL;
   while (mCurReadConnection != mReadConnections.end()) {
     TCPConnection *conn = *mCurReadConnection;
-    if (conn->isValid()) {
+    if (conn->isValid() || conn->hasPendingData()) {
       rv = conn;
     }
     ++mCurReadConnection;

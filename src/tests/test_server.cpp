@@ -19,7 +19,8 @@ public:
       }
     }
     if (mSocket) {
-      mSocket->disconnect();
+      // mSocket->disconnect();
+      mSocket->close();
     }
     return 0;
   }
@@ -62,15 +63,23 @@ int main(int, char**) {
         continue;
       }
       
-      if (conn->read(buffer, len, -1, &stat)) {
+      //if (conn->read(buffer, len, -1, &stat)) {
+      if (conn->readUntil(" ", buffer, len, -1, &stat)) {
         if (buffer) {
           std::cout << "\"" << buffer << "\"" << std::endl;
-          free(buffer);
         } else {
           std::cout << "<null>" << std::endl;
         }
       } else if (!stat) {
         std::cout << "Client error: " << stat << std::endl;
+      } else {
+        if (buffer) {
+          std::cout << "[partial] \"" << buffer << "\"" << std::endl;
+        }
+      }
+      
+      if (buffer) {
+        free(buffer);
       }
       
       socket.close(conn);

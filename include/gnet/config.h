@@ -45,6 +45,8 @@ USA.
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include <cerrno>
+#include <ctime>
 #include <iostream>
 #include <exception>
 #include <stdexcept>
@@ -58,22 +60,18 @@ USA.
 # pragma comment(lib, "wsock32.lib")
 typedef SOCKET sock_t;
 typedef int socklen_t;
-#define NULL_SOCKET INVALID_SOCKET
-#ifndef SHUT_RD
-# define SHUT_RD SD_RECEIVE
-#endif
-#ifndef SHUT_WR
-# define SHUT_WR SD_SEND
-#endif
-#ifndef SHUT_RDWR
-# define SHUT_RDWR SD_BOTH
-#endif
-//typedef int socklen_t;
-//# define socket_close          closesocket
-//# define socket_read(s, b, l)  recv(s, b, l, 0)
-//# define socket_write(s, b, l) send(s, b, l, 0)
-//# define SocketHandle          SOCKET
-//# define NULL_SOCKET           INVALID_SOCKET
+# define NULL_SOCKET INVALID_SOCKET
+# define sock_close closesocket
+# define sock_errno WSAGetLastError
+# ifndef SHUT_RD
+#  define SHUT_RD SD_RECEIVE
+# endif
+# ifndef SHUT_WR
+#  define SHUT_WR SD_SEND
+# endif
+# ifndef SHUT_RDWR
+#  define SHUT_RDWR SD_BOTH
+# endif
 #else
 # include <sys/types.h>
 # include <sys/socket.h>
@@ -84,12 +82,9 @@ typedef int socklen_t;
 # include <errno.h>
 # include <unistd.h>
 typedef int sock_t;
-#define NULL_SOCKET -1
-//# define socket_close          ::close
-//# define socket_read(s, b, l)  recv(s, b, l, 0) //::read(s, b, l)
-//# define socket_write(s, b, l) send(s, b, l, 0) //::write(s, b, l)
-//# define SocketHandle          int
-//# define NULL_SOCKET           -1
+# define NULL_SOCKET -1
+# define sock_close   ::close
+# define sock_errno() errno
 #endif
 
 namespace gnet {

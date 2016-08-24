@@ -44,13 +44,15 @@ int main(int, char**) {
         std::string data;
         
         while ((conn = socket.nextReadable()) != NULL) {
-          if (conn->read(data, -1, &stat)) {
+          if (conn->readUntil(" ", data, -1, &stat)) {
             std::cout << "\"" << data << "\"" << std::endl;
           
           } else if (!stat) {
             std::cerr << stat << std::endl;
             // should I wait here?
             socket.close(conn);
+          } else {
+            std::cout << "[partial] \"" << data << "\"" << std::endl;
           }
         }
       

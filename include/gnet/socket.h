@@ -42,13 +42,8 @@ namespace gnet {
       
       bool isValid() const;
       
-      inline sock_t fd() const {
-        return mFD;
-      }
-      
-      inline const Host& host() const {
-        return mHost;
-      }
+      inline const Host& host() const { return mHost; }
+      inline sock_t fd() const { return mFD; }
   
     protected:
       
@@ -75,37 +70,60 @@ namespace gnet {
       TCPSocket(const Host &host, Status *status=0);
       virtual ~TCPSocket();
       
+      
+      void setDefaultBlocking(bool blocking);
+      void setDefaultLinger(bool linger);
+      
+      
       Status bind();
       Status listen(int maxConnections);
       Status bindAndListen(int maxConnections);
-      void disconnect();
       
-      // timeout in milliseconds
-      // <0: blocking
-      // =0: non-blocking
-      // >0: non-blocking + timeout
+      // Arguments
+      //   [in] timeout : Select timeout.
+      //                  A value < 0 will make the call blocking.
+      //                  A value if 0 will make the select call returns immediately
+      //                  A value > 0 will make the call monitor the connections for the specified amount of time in milliseconds
+      //   [out] status : Error status
+      // 
+      // Return value
+      //   Number of connections that can be processed
       inline size_t select(double timeout=-1, Status *status=0) { return this->select(true, true, timeout, status); }
       inline size_t selectReadable(double timeout=-1, Status *status=0) { return this->select(true, false, timeout, status); }
       inline size_t selectWritable(double timeout=-1, Status *status=0) { return this->select(false, true, timeout, status); }
-      // To use after a select and before next one
+      // Use the following to iterate over selected connections
       TCPConnection* nextReadable();
       TCPConnection* nextWritable();
       
-      // peek is like select but doesn't change TCPSocket internal state
-      // return value is the same as stdlib 'select' function
-      // -1: error, otherwise number if sockets ready to operate
+      // Arguments
+      //   As select
+      // 
+      // Return value
+      //   -1 on error
+      //   number of sockets ready to operate otherwise
+      // 
+      // Note
+      //   The difference with select is that peek doen't populate the read/write connection sets
       inline int peek(double timeout=-1) { return this->peek(true, true, timeout); }
       inline int peekReadable(double timeout=-1) { return this->peek(true, false, timeout); }
       inline int peekWritable(double timeout=-1) { return this->peek(false, true, timeout); }
       
       TCPConnection* accept(Status *status=0);
       TCPConnection* connect(Status *status=0);
-      void close(TCPConnection*);
-      void closeAll();
       
-      void setDefaultBlocking(bool blocking);
-      void setDefaultLinger(bool linger);
-    
+      // Note: The close methods won't free the Connection objects
+      //       Use cleanup method to remove
+      // close all connections and the socket itself
+      void close();
+      // close all connections only
+      void closeConnections();
+      // close a single connection
+      void close(TCPConnection*);
+      
+      // destroy invalid connections objects
+      void cleanup();
+      
+      
     protected:
       
       TCPSocket();
@@ -116,7 +134,8 @@ namespace gnet {
       bool toTimeval(double ms, struct timeval &tv) const;
       size_t select(bool readable, bool writable, double timeout, Status *status=0);
       int peek(bool readable, bool writable, double timeout, fd_set *readfds=0, fd_set *writefds=0);
-      
+      void clearEvents();
+    
     protected:
       
       int mMaxConnections;
@@ -134,7 +153,6 @@ namespace gnet {
 #ifdef _WIN32
       std::vector<WSAEVENT> mEvents;
       std::vector<ConnectionList::const_iterator> mEventConns;
-      void clearEvents();
 #endif
   };
   

@@ -25,11 +25,6 @@ USA.
 #include <gnet/socket.h>
 #include <gcore/threads.h>
 #include <gcore/time.h>
-#include <exception>
-#include <cstring>
-#include <cstdlib>
-#include <ctime>
-#include <cerrno>
 
 #ifndef _WIN32
 # include <signal.h>
@@ -76,6 +71,9 @@ Connection::Connection(sock_t fd)
 
 Connection::~Connection() {
   if (mBuffer) {
+    if (mBufferOffset > 0) {
+      std::cerr << "WARNING: Deleting Connection object that have pending data" << std::endl;
+    }
     delete[] mBuffer;
     mBuffer = 0;
     mBufferSize = 0;
@@ -194,10 +192,8 @@ bool TCPConnection::isValid() const {
 }
 
 void TCPConnection::invalidate() {
-  if (mSocket && mSocket->fd() == mFD) {
-    mSocket->invalidate();
-  }
   Connection::invalidate();
+  mSocket = NULL;
 }
 
 bool TCPConnection::isAlive() const {
@@ -237,52 +233,90 @@ bool TCPConnection::read(char *&bytes, size_t &len, double timeout, Status *stat
   return readUntil(NULL, bytes, len, timeout, status);
 }
 
-bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, double timeout, Status *status) {
-  if (!isValid()) {
-    if (status) {
-      status->set(false, "[gnet::TCPConnection::readUntil] Invalid connection.", true);
+bool TCPConnection::checkUntil(const char *until, char *in, size_t inlen, char *&out, size_t &outlen) {
+  if (until != NULL && in && inlen > 0) {
+    // if out is set, in must be a substring
+    if (out && (in < out || in + inlen > out + outlen)) {
+      return false;
     }
-    return false;
-  }
-  
-  if (mBufferSize == 0) {
-    setBufferSize(512);
-  }
-  
-  int n = 0;
-  size_t allocated = 0;
-  bool full = false;
-  size_t searchOffset = 0;
-  
-  bytes = 0;
-  len = 0;
-  
-  // If set, check for until string in remaining bytes of last read
-  if (until != NULL && mBufferOffset > 0) {
-    // Note: mBuffer[mBufferOffset] == '\0'
+    
     size_t ulen = strlen(until);
-    char *found = strstr(mBuffer, until);
+    char *found = strstr(in, until);
     
     if (found != NULL) {
-      size_t sublen = found + ulen - mBuffer;
-      size_t rmnlen = mBufferOffset - sublen;
-      bytes = (char*) malloc(sublen+1);
-      len = sublen;
-      memcpy(bytes, mBuffer, sublen);
-      bytes[sublen] = '\0';
+      size_t sublen = found + ulen - in;
+      size_t rmnlen = inlen - sublen;
+      
+      if (!out) {
+        out = (char*) malloc(sublen+1);
+        outlen = sublen;
+        memcpy(out, in, sublen);
+        out[sublen] = '\0';
+      } else {
+        found[ulen] = '\0';
+        outlen -= rmnlen;
+      }
+      
+      // Keep any bytes after until in internal buffer
       mBufferOffset = (unsigned long)rmnlen;
       for (size_t i=0; i<rmnlen; ++i) {
         mBuffer[i] = mBuffer[sublen+i];
       }
       mBuffer[rmnlen] = '\0';
       
-      if (status) {
-        status->set(true, NULL);
-      }
       return true;
     }
   }
   
+  return false;
+}
+
+bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, double timeout, Status *status) {
+  bytes = 0;
+  len = 0;
+  
+  size_t allocated = 0;
+  size_t searchOffset = 0;
+  
+  if (mBufferSize == 0) {
+    setBufferSize(512);
+  
+  } else if (mBufferOffset > 0) {
+    len = mBufferOffset;
+    bytes = (char*) malloc(len + 1);
+    memcpy(bytes, mBuffer, len);
+    bytes[len] = '\0';
+    
+    mBufferOffset = 0;
+    
+    allocated = len;
+    searchOffset = 0;
+  }
+  
+  if (checkUntil(until, bytes, len, bytes, len)) {
+    if (status) {
+      status->set(true, NULL);
+    }
+    return true;
+  }
+  
+  if (!isValid()) {
+    if (len > 0) {
+      if (status) {
+        status->set(true, NULL);
+      }
+      return (until ? false : true);
+    
+    } else {
+      if (status) {
+        status->set(false, "[gnet::TCPConnection::readUntil] Invalid connection.", true);
+      }
+      return false;
+    }
+  }
+  
+  int n = 0;
+  bool cont = false;
   gcore::TimeCounter st(gcore::TimeCounter::MilliSeconds);
   
   do {
@@ -292,7 +326,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
         if (status) {
           status->set(true, NULL);
         }
-        return false;
+        return (until ? false : (len > 0));
       }
     }
     
@@ -304,64 +338,55 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     
     if (n == -1) {
       // There's no guaranty that EWOULDBLOCK == EAGAIN
+      int err = sock_errno();
 #ifdef _WIN32
-      int err = WSAGetLastError();
-      if (err == WSAEWOULDBLOCK) {
+      bool retry = (err == WSAEWOULDBLOCK);
 #else
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      bool retry = (err == EAGAIN || err == EWOULDBLOCK);
 #endif
+      if (retry) {
         if (timeout == 0) {
-          if (bytes) {
-            free(bytes);
-            bytes = 0;
-            len = 0;
-          }
           if (status) {
             status->set(true, NULL);
           }
-          return false;
+          return (until ? false : (len > 0));
         
         } else {
           if (timeout < 0) {
-            // Blocking read -> Sleep 50ms before trying again
-            gcore::Thread::SleepCurrent(50);
+            // Blocking read
+            if (len > 0) {
+              // We already have data to return
+              if (status) {
+                status->set(true, NULL);
+              }
+              return (until ? false : true);
+            } else {
+              // Sleep 50ms before trying again
+              gcore::Thread::SleepCurrent(50);
+            }
           }
-          full = true;
+          cont = true;
           continue;
         }
       
       } else {
-        // Any other error
-        if (bytes) {
-           free(bytes);
-           bytes = 0;
-           len = 0;
-        }
-        
         if (status) {
           status->set(false, "[gnet::TCPConnection::readUntil] Failed to read from socket.", true);
         }
-        return false;
+        return (until ? false : (len > 0));
       }
     }
     
     if (n == 0) {
       // Connection closed
-      this->invalidate();
-      
-      if (bytes) {
-         free(bytes);
-         bytes = 0;
-         len = 0;
-      }
-      
+      mSocket->close(this);
       if (status) {
         status->set(false, "[gnet::TCPConnection::readUntil] Connection remotely closed.");
       }
-      return false;
+      return (until ? false : (len > 0));
     }
     
-    full = (n == int(mBufferSize - mBufferOffset));
+    cont = (n == int(mBufferSize - mBufferOffset));
     mBufferOffset = 0;
     
     if (bytes == 0) {
@@ -385,34 +410,18 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
       bytes[len] = '\0';
     }
     
-    // Check for until string if set
-    if (until != NULL) {
-      size_t ulen = strlen(until);
-      char *found = strstr(bytes+searchOffset, until);
-      
-      if (found != NULL) {
-        size_t sublen = found + ulen - (bytes + searchOffset);
-        size_t rmnlen = n - sublen;
-        found[ulen] = '\0';
-        len -= rmnlen;
-        // keep remaining bytes in buffer
-        mBufferOffset = (unsigned long)rmnlen;
-        for (size_t i=0; i<rmnlen; ++i) {
-          mBuffer[i] = mBuffer[sublen+i];
-        }
-        mBuffer[rmnlen] = '\0';
-        if (status) {
-          status->set(true, NULL);
-        }
-        return true;
-      
-      } else {
-        // continue reading
-        full = true;
+    if (checkUntil(until, bytes + searchOffset, size_t(n), bytes, len)) {
+      if (status) {
+        status->set(true, NULL);
+      }
+      return true;
+    } else {
+      if (until) {
+        cont = true;
       }
     }
     
-  } while (full);
+  } while (cont);
   
   if (status) {
     status->set(true, NULL);
@@ -451,13 +460,13 @@ size_t TCPConnection::write(const char *bytes, size_t len, double timeout, Statu
       }
     }
     
-    // If connection is remotly closed, 'send' will result in a SIGPIPE signal on unix systems
+    // If connection is remotely closed, 'send' will result in a SIGPIPE signal on unix systems
     
     /*
     // Using isAlive seems to respond faster to remove connection close
     // But it can be blocking!
     if (!isAlive()) {
-      this->invalidate();
+      mSocket->close(this);
       if (status) {
         status->set(false, "[gnet::TCPConnection::write] Connection remotely closed.");
       }
@@ -481,7 +490,7 @@ size_t TCPConnection::write(const char *bytes, size_t len, double timeout, Statu
         noop = (nosigpipe != 0);
       }
 #  endif // SO_SIGPIPE
-      BlockSignal(SIGPIPE, noop);
+      BlockSignal _sbs(SIGPIPE, noop);
 # else // SIGPIPE
       // No workaround SIGPIPE signal
 # endif // SIGPIPE
@@ -490,11 +499,11 @@ size_t TCPConnection::write(const char *bytes, size_t len, double timeout, Statu
     }
 
     if (n == -1) {
+      int err = sock_errno();
 #ifdef _WIN32
-      int err = WSAGetLastError();
       if (err == WSAEWOULDBLOCK) {
 #else
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      if (err == EAGAIN || err == EWOULDBLOCK) {
 #endif
         if (timeout == 0) {
           if (status) {
@@ -515,9 +524,12 @@ size_t TCPConnection::write(const char *bytes, size_t len, double timeout, Statu
 #ifdef _WIN32
         if (err == WSAECONNRESET || err == WSAECONNABORTED) {
 #else
-        if (errno == 0 || errno == EPIPE) {
+        // why did I check for err == 0
+        //if (err == 0 || err == EPIPE) {
+        if (err == EPIPE) {
 #endif
-          this->invalidate();
+          mSocket->close(this);
+          
           if (status) {
             status->set(false, "[gnet::TCPConnection::write] Connection remotely closed.");
           }
