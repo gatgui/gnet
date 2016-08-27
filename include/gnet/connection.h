@@ -83,6 +83,11 @@ namespace gnet {
       bool readUntil(const char *until, std::string &s, double timeout=-1, Status *status=0);
       size_t write(const std::string &s, double timeout=-1, Status *status=0);
       
+      // If bytes is non NULL, alloc will try re-allocating them
+      // bytes must have been allocated by 'alloc' method
+      char* alloc(size_t sz, char *bytes=0);
+      // Use this method to release memory allocated by 'read', 'readUntil' or 'alloc' methods
+      void free(char *&bytes);
       
       void setBufferSize(unsigned long n);
       inline unsigned long getBufferSize() const { return mBufferSize; }

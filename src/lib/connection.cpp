@@ -80,7 +80,22 @@ Connection::~Connection() {
     mBufferOffset = 0;
   }
 }
-  
+
+char* Connection::alloc(size_t sz, char *bytes) {
+  if (bytes) {
+    return (char*) realloc((void*)bytes, sz);
+  } else {
+    return (char*) malloc(sz);
+  }
+}
+
+void Connection::free(char *&bytes) {
+  if (bytes) {
+    ::free(bytes);
+    bytes = 0;
+  }
+}
+
 bool Connection::isValid() const {
   return (mFD != NULL_SOCKET);
 }
@@ -150,7 +165,7 @@ bool Connection::read(std::string &s, double timeout, Status *status) {
   bool rv = this->read(bytes, len, timeout, status);
   if (bytes != 0) {
     s = bytes;
-    free(bytes);
+    this->free(bytes);
   } else {
     s = "";
   }
@@ -163,7 +178,7 @@ bool Connection::readUntil(const char *until, std::string &s, double timeout, St
   bool rv = this->readUntil(until, bytes, len, timeout, status);
   if (bytes != 0) {
     s = bytes;
-    free(bytes);
+    this->free(bytes);
   } else {
     s = "";
   }
@@ -248,7 +263,7 @@ bool TCPConnection::checkUntil(const char *until, char *in, size_t inlen, char *
       size_t rmnlen = inlen - sublen;
       
       if (!out) {
-        out = (char*) malloc(sublen+1);
+        out = this->alloc(sublen+1);
         outlen = sublen;
         memcpy(out, in, sublen);
         out[sublen] = '\0';
@@ -283,7 +298,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
   
   } else if (mBufferOffset > 0) {
     len = mBufferOffset;
-    bytes = (char*) malloc(len + 1);
+    bytes = this->alloc(len + 1);
     memcpy(bytes, mBuffer, len);
     bytes[len] = '\0';
     
@@ -392,7 +407,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
     if (bytes == 0) {
       len = n;
       allocated = n;
-      bytes = (char*) malloc(allocated+1);
+      bytes = this->alloc(allocated+1);
       memcpy(bytes, mBuffer, n);
       bytes[len] = '\0';
       searchOffset = 0;
@@ -402,7 +417,7 @@ bool TCPConnection::readUntil(const char *until, char *&bytes, size_t &len, doub
         while (allocated < (len + n)) {
           allocated <<= 1;
         }
-        bytes = (char*) realloc(bytes, allocated+1);
+        bytes = this->alloc(allocated+1, bytes);
       }
       memcpy(bytes+len, mBuffer, n);
       searchOffset = len;
