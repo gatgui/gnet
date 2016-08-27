@@ -78,9 +78,7 @@ int main(int, char**) {
         }
       }
       
-      if (buffer) {
-        free(buffer);
-      }
+      conn->free(buffer);
       
       socket.close(conn);
     }
